@@ -63,7 +63,7 @@ phases:
 
   - id: 7
     name: "ML staging head + SHAP attributions + arbiter"
-    status: todo
+    status: done
     artifacts:
       - src/sorbed/staging/ml_head.py
       - src/sorbed/staging/arbiter.py

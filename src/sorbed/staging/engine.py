@@ -15,7 +15,9 @@ from __future__ import annotations
 
 from sorbed.domain.decision import Caveat, RuleFiring, StageDecision
 from sorbed.domain.enums import PressureInjuryStage, Severity, SkinToneBand
+from sorbed.staging.arbiter import arbitrate
 from sorbed.staging.features import FeatureVector
+from sorbed.staging.ml_head import GBMStagingHead
 from sorbed.staging.rules import RULES, Thresholds
 
 # Confidence is dampened for grades whose determination needs depth.
@@ -32,9 +34,11 @@ class StagingEngine:
         thresholds: Thresholds | None = None,
         *,
         low_confidence_threshold: float = 0.5,
+        ml_head: GBMStagingHead | None = None,
     ) -> None:
         self._t = thresholds or Thresholds()
         self._low_confidence = low_confidence_threshold
+        self._ml_head = ml_head
 
     def decide(
         self,
@@ -54,25 +58,47 @@ class StagingEngine:
         stage = winner.implied_stage or PressureInjuryStage.INDETERMINATE
         confidence = self._confidence(stage, features, winner)
 
+        # Optional learned head, reconciled by the arbiter. Rule-only by default.
+        ml_stage: PressureInjuryStage | None = None
+        ml_probs: dict[PressureInjuryStage, float] = {}
+        agreement: bool | None = None
+        arbitration = "rule_only"
+        ml_evidence: list = []
+        ml_caveat: str | None = None
+        if self._ml_head is not None:
+            ml_pred = self._ml_head.predict(features)
+            result = arbitrate(stage, confidence, ml_pred)
+            stage = result.stage
+            confidence = result.confidence
+            arbitration = result.arbitration
+            agreement = result.agreement
+            ml_stage = ml_pred.stage
+            ml_probs = ml_pred.probabilities
+            ml_evidence = result.ml_evidence
+            ml_caveat = result.caveat
+
         caveats = self._caveats(stage, features, skin_tone, is_calibrated)
+        if ml_caveat:
+            caveats.append(Caveat(severity=Severity.WARNING, message=ml_caveat))
         confidence, abstained = self._maybe_abstain(stage, confidence)
         if abstained:
             stage = PressureInjuryStage.INDETERMINATE
 
         evidence = list(winner.evidence)
         for other in fired:
-            if other is winner:
-                continue
-            evidence.extend(other.evidence)
+            if other is not winner:
+                evidence.extend(other.evidence)
+        evidence.extend(ml_evidence)
 
         return StageDecision(
             stage=stage,
             confidence=round(confidence, 4),
             abstained=abstained,
             rule_stage=winner.implied_stage,
-            ml_stage=None,
-            agreement=None,
-            arbitration="rule_only",
+            ml_stage=ml_stage,
+            ml_stage_probabilities=ml_probs,
+            agreement=agreement,
+            arbitration=arbitration,
             evidence=evidence,
             rule_firings=firings,
             caveats=caveats,
