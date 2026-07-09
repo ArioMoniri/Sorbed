@@ -117,6 +117,21 @@ class HealingScores(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class ColorCues(BaseModel):
+    """Color-derived fractions used as staging evidence.
+
+    These persist the deep-tissue (maroon/purple), erythema, and open-bed signals
+    the classifier computed, so the staging engine's evidence can point at real,
+    reported fields.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    maroon_purple_fraction: float = Field(ge=0, le=1)
+    erythema_fraction: float = Field(ge=0, le=1)
+    open_bed_fraction: float = Field(ge=0, le=1)
+
+
 class PeriwoundFindings(BaseModel):
     """Color/erythema analysis of the skin ring around the wound."""
 
@@ -134,6 +149,7 @@ class Metrics(BaseModel):
 
     geometry: GeometryMetrics
     tissue: TissueComposition
+    color_cues: ColorCues
     depth_proxy: DepthProxy | None = None
     periwound: PeriwoundFindings | None = None
     healing_scores: HealingScores | None = None

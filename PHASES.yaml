@@ -26,14 +26,14 @@ phases:
 
   - id: 2
     name: "Scale calibration"
-    status: todo
+    status: done
     artifacts:
       - src/sorbed/preprocess/calibration.py
       - src/sorbed/preprocess/fiducial.py
 
   - id: 3
     name: "Classical segmentation, tissue analysis & morphometrics (weight-free)"
-    status: todo
+    status: done
     artifacts:
       - src/sorbed/segmentation/classical.py
       - src/sorbed/tissue/color_model.py
@@ -48,7 +48,7 @@ phases:
 
   - id: 5
     name: "Explainable staging engine (rule layer)"
-    status: todo
+    status: done
     artifacts:
       - src/sorbed/staging/engine.py
       - src/sorbed/staging/rules.py

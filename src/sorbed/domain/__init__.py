@@ -18,6 +18,7 @@ from sorbed.domain.enums import (
 )
 from sorbed.domain.image import Calibration, ImageMetadata
 from sorbed.domain.metrics import (
+    ColorCues,
     DepthProxy,
     GeometryMetrics,
     HealingScores,
@@ -33,6 +34,7 @@ __all__ = [
     "Calibration",
     "CalibrationStatus",
     "Caveat",
+    "ColorCues",
     "DepthProxy",
     "Evidence",
     "EvidenceDirection",
