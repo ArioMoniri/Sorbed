@@ -65,6 +65,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--input-size", type=int, default=512, help="square H=W input")
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--encoder", type=str, default="efficientnet-b0")
+    parser.add_argument(
+        "--encoder-weights",
+        type=str,
+        default="imagenet",
+        help="Pretrained encoder weights ('imagenet') or 'none' to train from scratch "
+        "(use 'none' in environments without access to the weight host).",
+    )
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument(
@@ -193,9 +200,10 @@ def main(argv: list[str] | None = None) -> int:
         num_workers=args.num_workers,
     )
 
+    encoder_weights = None if args.encoder_weights.lower() == "none" else args.encoder_weights
     model = smp.Unet(
         encoder_name=args.encoder,
-        encoder_weights="imagenet",
+        encoder_weights=encoder_weights,
         in_channels=3,
         classes=1,
     ).to(device)
