@@ -101,6 +101,7 @@ path = "src/sorbed/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sorbed"]
+artifacts = ["src/sorbed/visualize/fonts/*.ttf", "src/sorbed/visualize/fonts/*.txt"]
 
 [tool.ruff]
 line-length = 100
