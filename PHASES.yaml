@@ -9,7 +9,7 @@
 phases:
   - id: 0
     name: "Skeleton & domain contracts"
-    status: todo
+    status: done
     artifacts:
       - pyproject.toml
       - src/sorbed/__init__.py
@@ -18,7 +18,7 @@ phases:
 
   - id: 1
     name: "Multi-format image I/O & normalization"
-    status: todo
+    status: done
     artifacts:
       - src/sorbed/io/sniff.py
       - src/sorbed/io/registry.py
