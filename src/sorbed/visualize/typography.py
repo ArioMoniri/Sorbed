@@ -1,41 +1,67 @@
 """Font loading for the rendered figures.
 
-Ships the Inter typeface (SIL Open Font License, see ``fonts/OFL.txt``) so every
-figure has consistent, modern typography regardless of the host's installed
-fonts. Falls back to DejaVu, then to Pillow's built-in bitmap font, if Inter
-cannot be loaded.
+Ships the Geist typeface (SIL Open Font License, see ``fonts/Geist-OFL.txt``) — a
+clean, modern UI face — so every figure has consistent typography regardless of
+the host's installed fonts. The weight is driven numerically through the font's
+variable ``Weight`` axis (the reliable path in Pillow), and the result falls back
+to DejaVu, then Pillow's built-in bitmap font, if Geist cannot be loaded.
 """
 
 from __future__ import annotations
 
+import contextlib
 from functools import lru_cache
 from pathlib import Path
 
 from PIL import ImageFont
 
-_FONT_PATH = Path(__file__).resolve().parent / "fonts" / "Inter.ttf"
-_WEIGHTS = ("Thin", "ExtraLight", "Light", "Regular", "Medium", "SemiBold", "Bold", "ExtraBold")
+_FONT_PATH = Path(__file__).resolve().parent / "fonts" / "Geist.ttf"
+
+# Named weights → numeric values on the variable Weight axis.
+_WEIGHTS = {
+    "Light": 300,
+    "Regular": 400,
+    "Medium": 500,
+    "SemiBold": 600,
+    "Bold": 700,
+    "ExtraBold": 800,
+}
 
 
-@lru_cache(maxsize=96)
+@lru_cache(maxsize=128)
 def font(size: int, weight: str = "Regular") -> ImageFont.ImageFont:
-    """Return an Inter font at ``size`` px and the named ``weight``.
+    """Return the UI font at ``size`` px and the named ``weight``.
 
-    ``weight`` is one of Inter's named instances (Regular, Medium, SemiBold,
-    Bold, ...). Results are cached, so repeated calls are cheap.
+    Results are cached, so repeated calls are cheap.
     """
     if _FONT_PATH.is_file():
         try:
             face = ImageFont.truetype(str(_FONT_PATH), size)
-            if weight in _WEIGHTS:
-                face.set_variation_by_name(weight)
+            _apply_weight(face, _WEIGHTS.get(weight, 400))
             return face
         except OSError:
             pass
-    bold = weight in {"SemiBold", "Bold", "ExtraBold", "Medium"}
+    bold = weight in {"Medium", "SemiBold", "Bold", "ExtraBold"}
     for name in (("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"), "DejaVuSans.ttf"):
         try:
             return ImageFont.truetype(name, size)
         except OSError:
             continue
     return ImageFont.load_default()
+
+
+def _apply_weight(face: ImageFont.ImageFont, weight_value: int) -> None:
+    """Set the variable Weight axis numerically; no-op for static fonts."""
+    try:
+        axes = face.get_variation_axes()
+    except OSError:
+        return
+    if not axes:
+        return
+    values = []
+    for axis in axes:
+        name = axis["name"]
+        name = name.decode("latin-1") if isinstance(name, bytes) else name
+        values.append(weight_value if "eight" in name.lower() else axis["default"])
+    with contextlib.suppress(OSError):
+        face.set_variation_by_axes(values)
