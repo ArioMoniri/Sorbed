@@ -77,6 +77,75 @@ def analyze(
 
 
 @app.command()
+def compare(
+    images: Annotated[list[Path], typer.Argument(help="Two+ images of the same wound, in order.")],
+    days: Annotated[
+        str | None, typer.Option("--days", help="Comma days since baseline, e.g. 0,14,28.")
+    ] = None,
+    mm_per_px: Annotated[
+        float | None, typer.Option("--mm-per-px", help="Scale in mm per pixel (all visits).")
+    ] = None,
+    patient: Annotated[
+        str | None, typer.Option("--patient", help="Patient/wound reference label.")
+    ] = None,
+    out: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")] = Path("reports"),
+) -> None:
+    """Compare visits of the same wound over time and chart the healing trend."""
+    from sorbed.trend import compute_trend, timepoint_from_analysis
+    from sorbed.visualize.detection import render_detection
+    from sorbed.visualize.trend import render_trend_dashboard
+
+    if len(images) < 2:
+        err_console.print("[red]Provide at least two images (visits) to compare.[/red]")
+        raise typer.Exit(2)
+    for img in images:
+        if not img.exists():
+            err_console.print(f"[red]No such file:[/red] {img}")
+            raise typer.Exit(2)
+
+    day_values = _parse_days(days, len(images))
+    if day_values is None:
+        err_console.print("[red]--days must be a comma list matching the number of images.[/red]")
+        raise typer.Exit(2)
+
+    options = AnalyzeOptions(mm_per_px=mm_per_px)
+    points, thumbs = [], []
+    for img, day in zip(images, day_values, strict=True):
+        bundle = analyze_image(img, options=options)
+        label = f"Day {day:g}"
+        points.append(timepoint_from_analysis(bundle.analysis, day=day, label=label))
+        thumbs.append(render_detection(bundle.analysis, bundle.display_image.to_uint8_rgb()))
+
+    trend = compute_trend(points, patient_ref=patient)
+    out.mkdir(parents=True, exist_ok=True)
+    dash = render_trend_dashboard(trend, thumbs)
+    dash.save(out / "trend_dashboard.png")
+    (out / "trend.json").write_text(trend.model_dump_json(indent=2), encoding="utf-8")
+
+    console.print(f"\n[bold]Healing trend[/bold] — {trend.trajectory.upper()}")
+    console.print(f"Area reduction: {trend.percent_area_reduction:+.0f}% over "
+                  f"{day_values[-1] - day_values[0]:g} days")
+    if trend.healing_rate_per_week is not None:
+        console.print(f"Healing rate: {trend.healing_rate_per_week:+.2f} {trend.unit}/week")
+    if trend.projected_days_to_closure is not None:
+        console.print(f"Projected closure: ~{trend.projected_days_to_closure:.0f} days")
+    if trend.likely_to_heal is not None:
+        console.print(f"4-week PAR: {trend.par_at_4_weeks:.0f}%  "
+                      f"({'on track to heal' if trend.likely_to_heal else 'below 40% threshold'})")
+    console.print(f"\n[green]Wrote trend dashboard + JSON to[/green] {out}/")
+
+
+def _parse_days(days: str | None, count: int) -> list[float] | None:
+    if days is None:
+        return [float(i) for i in range(count)]
+    try:
+        parsed = [float(p.strip()) for p in days.split(",") if p.strip()]
+    except ValueError:
+        return None
+    return parsed if len(parsed) == count else None
+
+
+@app.command()
 def inspect(
     image: Annotated[Path, typer.Argument(help="Image to inspect (no grading).")],
 ) -> None:
