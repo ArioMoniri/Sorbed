@@ -42,7 +42,14 @@ class DicomDecoder(Decoder):
     def decode(self, data: bytes, *, filename: str | None = None) -> DecodedImage:
         try:
             import pydicom
-            from pydicom.pixel_data_handlers.util import apply_modality_lut, apply_voi_lut
+
+            try:  # pydicom >= 3.0
+                from pydicom.pixels import apply_modality_lut, apply_voi_lut
+            except ImportError:  # pydicom < 3.0
+                from pydicom.pixel_data_handlers.util import (
+                    apply_modality_lut,
+                    apply_voi_lut,
+                )
         except ImportError as exc:
             raise DependencyMissingError(
                 "DICOM support needs the 'formats' extra: pip install 'sorbed[formats]'"
@@ -100,7 +107,10 @@ class DicomDecoder(Decoder):
     @staticmethod
     def _to_rgb(ds: object, raw: np.ndarray, photometric: str) -> np.ndarray:
         if photometric.startswith("YBR"):
-            from pydicom.pixel_data_handlers.util import convert_color_space
+            try:  # pydicom >= 3.0
+                from pydicom.pixels import convert_color_space
+            except ImportError:  # pydicom < 3.0
+                from pydicom.pixel_data_handlers.util import convert_color_space
 
             return convert_color_space(raw, photometric, "RGB")
         return raw

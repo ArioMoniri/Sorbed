@@ -126,7 +126,11 @@ class StagingEngine:
         # Evidence margin: how strongly the winning evidence clears its threshold.
         margin = 0.6
         for ev in winner.evidence:
-            if isinstance(ev.observed, (int, float)) and isinstance(ev.threshold, (int, float)):
+            # bool is an int subclass, so test categorical evidence first.
+            if isinstance(ev.observed, bool):
+                if ev.observed:  # a directly-observed categorical finding
+                    margin = max(margin, 0.9)
+            elif isinstance(ev.observed, (int, float)) and isinstance(ev.threshold, (int, float)):
                 spread = abs(float(ev.observed) - float(ev.threshold))
                 margin = max(margin, min(1.0, 0.6 + spread))
         conf = base * margin
@@ -180,7 +184,10 @@ class StagingEngine:
     ) -> tuple[float, bool]:
         if stage is PressureInjuryStage.INDETERMINATE:
             return confidence, True
-        if confidence < self._low_confidence and stage.is_depth_dependent:
+        # Unstageable and Stage 4 are direct visual findings (obscured base /
+        # exposed structure); only the depth-*inferred* grades abstain when weak.
+        inferred = {PressureInjuryStage.STAGE_3, PressureInjuryStage.DEEP_TISSUE}
+        if confidence < self._low_confidence and stage in inferred:
             return confidence, True
         return confidence, False
 

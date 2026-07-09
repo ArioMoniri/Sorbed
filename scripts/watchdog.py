@@ -113,10 +113,7 @@ def _decorator_name(dec: ast.expr) -> str:
 
 
 def _is_protocol_class_body(node: ast.ClassDef) -> bool:
-    for base in node.bases:
-        if _decorator_name(base) in {"Protocol", "ABC"}:
-            return True
-    return False
+    return any(_decorator_name(base) in {"Protocol", "ABC"} for base in node.bases)
 
 
 def scan_markers(path: Path, report: Report) -> None:
@@ -234,7 +231,7 @@ def check_phase_manifest(report: Report) -> None:
         return  # Manifest is optional until the roadmap lands.
     try:
         phases = _load_phase_manifest(PHASES_FILE)
-    except Exception as exc:  # noqa: BLE001 - surface any parse issue as config error
+    except Exception as exc:
         report.config_error = f"could not parse {PHASES_FILE.name}: {exc}"
         return
     for phase in phases:

@@ -56,7 +56,7 @@ phases:
 
   - id: 6
     name: "Pluggable ML segmentation backends + weight registry"
-    status: todo
+    status: done
     artifacts:
       - src/sorbed/segmentation/backends/onnx_backend.py
       - src/sorbed/models/registry.py
@@ -70,15 +70,15 @@ phases:
 
   - id: 8
     name: "Pipeline orchestration, CLI & FastAPI service"
-    status: todo
+    status: done
     artifacts:
-      - src/sorbed/pipeline/orchestrator.py
+      - src/sorbed/pipeline/analyzer.py
       - src/sorbed/cli/main.py
       - src/sorbed/api/app.py
 
   - id: 9
     name: "Docs, model cards, Docker & release hardening"
-    status: todo
+    status: done
     artifacts:
       - README.md
       - Dockerfile
