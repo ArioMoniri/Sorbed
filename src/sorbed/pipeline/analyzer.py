@@ -93,11 +93,12 @@ class WoundAnalyzer:
                 valid = image.alpha > 0.5 if image.alpha is not None else None
                 analysis_pixels = gray_world_normalize(image.pixels, valid)
 
-        with _Timer(timings, "skin_tone"):
-            skin_tone = estimate_skin_tone(analysis_pixels)
-
         with _Timer(timings, "segmentation"):
             seg = self._segmenter.segment(image)
+
+        with _Timer(timings, "skin_tone"):
+            # Sample real skin from the periwound ring, now that the wound is known.
+            skin_tone = estimate_skin_tone(analysis_pixels, seg.wound_mask)
 
         with _Timer(timings, "tissue"):
             tissue = self._tissue.classify(analysis_pixels, seg.wound_mask)

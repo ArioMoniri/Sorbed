@@ -80,6 +80,37 @@ def test_geometry_calibrated_area_in_cm2():
     assert geom.area_cm2 == pytest.approx(expected_mm2 / 100.0, rel=0.03)
 
 
+def test_skin_tone_light_vs_dark():
+    from sorbed.domain.enums import SkinToneBand
+    from sorbed.preprocess.skin_tone import estimate_skin_tone
+
+    h, w = 200, 200
+    yy, xx = np.ogrid[:h, :w]
+    wound = (xx - 100) ** 2 + (yy - 100) ** 2 <= 30**2
+
+    light = np.full((h, w, 3), (0.85, 0.68, 0.58), np.float32)
+    light[wound] = GRANULATION
+    assert estimate_skin_tone(light, wound) is SkinToneBand.I_III
+
+    dark = np.full((h, w, 3), (0.33, 0.23, 0.18), np.float32)
+    dark[wound] = GRANULATION
+    assert estimate_skin_tone(dark, wound) is SkinToneBand.IV_VI
+
+
+def test_skin_tone_ignores_black_padding():
+    # FUSeg-style black border must not force an UNKNOWN result.
+    from sorbed.domain.enums import SkinToneBand
+    from sorbed.preprocess.skin_tone import estimate_skin_tone
+
+    h, w = 200, 200
+    img = np.zeros((h, w, 3), np.float32)  # black padding
+    img[40:160, 40:160] = (0.85, 0.68, 0.58)  # skin patch
+    yy, xx = np.ogrid[:h, :w]
+    wound = (xx - 100) ** 2 + (yy - 100) ** 2 <= 20**2
+    img[wound] = GRANULATION
+    assert estimate_skin_tone(img, wound) is not SkinToneBand.UNKNOWN
+
+
 def test_geometry_area_monotonic_under_dilation():
     from scipy import ndimage
 
