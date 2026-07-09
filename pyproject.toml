@@ -103,7 +103,10 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
-ignore = ["N802", "N803", "N806"]  # allow clinical/mathematical variable names
+ignore = [
+    "N802", "N803", "N806",  # allow clinical/mathematical variable names
+    "RUF001", "RUF002", "RUF003",  # intentional unicode (×, em-dash) in display strings
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B", "N"]

@@ -41,7 +41,7 @@ phases:
 
   - id: 4
     name: "Visualization, guides & reporting"
-    status: todo
+    status: done
     artifacts:
       - src/sorbed/visualize/overlay.py
       - src/sorbed/report/json_report.py
