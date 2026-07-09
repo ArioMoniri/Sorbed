@@ -224,11 +224,24 @@ main {
 .dz-title { font-weight: 600; margin: 0 0 2px; }
 .dz-sub { color: var(--muted); font-size: 13px; margin: 0; }
 
+/* When a file is chosen, hide the drop prompt (belt-and-suspenders alongside JS). */
+.dropzone.has-file .dz-inner { display: none !important; }
+
 .dz-preview { display: flex; align-items: center; gap: var(--sp-4); text-align: left; }
 .dz-preview img {
   width: 96px; height: 96px; object-fit: cover; border-radius: var(--radius-s);
   border: 1px solid var(--hairline); background: var(--surface);
 }
+/* Fallback glyph shown when the browser cannot render the format's preview. */
+.dz-noimg {
+  display: none; width: 96px; height: 96px; border-radius: var(--radius-s);
+  border: 1px solid var(--hairline); background: var(--surface-2);
+  align-items: center; justify-content: center;
+  color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .05em;
+}
+.dropzone.preview-unavailable .dz-preview img { display: none; }
+.dropzone.preview-unavailable .dz-noimg { display: inline-flex; }
+.dz-note { color: var(--muted); font-size: 12px; }
 .dz-fileinfo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .file-name { font-weight: 500; word-break: break-all; }
 

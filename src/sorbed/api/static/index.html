@@ -2,6 +2,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light dark" />
 <title>Sorbed — pressure-injury analysis</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23635bff'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/static/styles.css" />
 
 <a class="skip-link" href="#main">Skip to content</a>
@@ -46,12 +47,15 @@
         <div class="dz-inner">
           <span class="dz-icon" aria-hidden="true"></span>
           <p class="dz-title">Drop a wound image here</p>
-          <p class="dz-sub" id="dropHelp">or click to browse — PNG, JPEG, TIFF</p>
+          <p class="dz-sub" id="dropHelp">or click to browse — PNG · JPEG · WEBP · HEIC · DICOM · TIFF</p>
         </div>
         <div class="dz-preview" id="dzPreview" hidden>
           <img id="previewImg" alt="Selected wound image preview" />
+          <span class="dz-noimg" aria-hidden="true">FILE</span>
           <div class="dz-fileinfo">
             <span id="fileName" class="file-name"></span>
+            <span id="previewNote" class="dz-note" hidden>Preview isn't shown for this
+              format — it will still be analyzed.</span>
             <button type="button" id="clearFile" class="link-btn">Remove</button>
           </div>
         </div>

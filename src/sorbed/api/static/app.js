@@ -628,15 +628,31 @@
 
     var currentFile = null;
     var previewUrl = null;
+    var previewNote = $("#previewNote");
+
+    // Browsers cannot render some clinical formats (TIFF/HEIC/DICOM/RAW): fall
+    // back to a file glyph + note instead of a broken image. The server still
+    // decodes and analyzes them.
+    previewImg.addEventListener("load", function () {
+      dropzone.classList.remove("preview-unavailable");
+      if (previewNote) previewNote.hidden = true;
+    });
+    previewImg.addEventListener("error", function () {
+      dropzone.classList.add("preview-unavailable");
+      if (previewNote) previewNote.hidden = false;
+    });
 
     function setFile(file) {
       if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
       currentFile = file || null;
+      dropzone.classList.remove("preview-unavailable");
+      if (previewNote) previewNote.hidden = true;
       if (currentFile) {
         previewUrl = URL.createObjectURL(currentFile);
         previewImg.src = previewUrl;
         fileNameEl.textContent = currentFile.name;
         preview.hidden = false;
+        dropzone.classList.add("has-file");
         if (dzInner) dzInner.style.display = "none";
         analyzeBtn.disabled = false;
         dropzone.setAttribute("aria-label", "Selected file: " + currentFile.name + ". Press Enter to choose a different file.");
@@ -644,6 +660,7 @@
         previewImg.removeAttribute("src");
         fileNameEl.textContent = "";
         preview.hidden = true;
+        dropzone.classList.remove("has-file");
         if (dzInner) dzInner.style.display = "";
         analyzeBtn.disabled = true;
         fileInput.value = "";
