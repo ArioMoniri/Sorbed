@@ -133,3 +133,49 @@ export SORBED_ONNX_INPUT="512"   # fallback H=W only if the model has dynamic ax
 If `SORBED_ONNX_MODEL` is unset or missing, the backend raises a clear error
 telling you to set it or run `sorbed models pull` — it never silently falls back
 or fabricates a mask.
+
+---
+
+## Reproduce the real FUSeg-trained model (end to end)
+
+This trains a real wound-segmentation model on real clinical data and runs it in
+the pipeline — no HuggingFace, no synthetic data.
+
+```bash
+pip install -e '.[dev,ml]' torch segmentation-models-pytorch
+
+# 1. Fetch real wound images + expert masks (MICCAI FUSeg, committed on GitHub).
+python scripts/fetch_fuseg.py --out data/fuseg --split train --limit 300
+python scripts/fetch_fuseg.py --out data/fuseg --split validation --limit 60
+
+# 2. Train a U-Net and export ONNX. Use --encoder-weights imagenet where the
+#    weight host is reachable (higher Dice); 'none' trains from scratch offline.
+python scripts/train_segmenter.py \
+  --images data/fuseg/train/images --masks data/fuseg/train/labels \
+  --encoder mobilenet_v2 --encoder-weights none \
+  --input-size 224 --epochs 20 --batch-size 8 --out-dir artifacts/segmenter
+
+# 3. Run the trained model through Sorbed on held-out real images.
+export SORBED_SEGMENTATION_BACKEND=onnx
+export SORBED_ONNX_MODEL=artifacts/segmenter/model.onnx
+sorbed analyze data/fuseg/validation/images/0002.png --out reports
+```
+
+**Reference result (this exact recipe, CPU, from scratch):** best validation
+Dice ≈ **0.64** after 20 epochs at 224 px with a randomly-initialized
+MobileNetV2 encoder. That is a genuine trained model, not a strong one — it
+misses small or subtle ulcers. Using an ImageNet-pretrained encoder, 512 px
+input, and more epochs (as in the literature) reaches ≈0.85+ Dice; do that where
+the encoder-weight host is reachable.
+
+**Notes that matter:**
+
+- The ONNX backend reads the model's fixed input size from the graph; for a
+  dynamic-axis model set `SORBED_ONNX_INPUT`. Normalization defaults to ImageNet
+  (`SORBED_ONNX_MEAN` / `SORBED_ONNX_STD` to override) and must match training.
+- Sorbed runs the **learned segmenter on the raw image** (matching its training
+  distribution); color normalization is applied only to the tissue-color
+  analysis. Train your model on un-color-normalized images accordingly.
+- Register the exported `model.onnx` SHA-256 in `models/registry.json` (see the
+  registry) so results are tied to exact weights. Do not commit weights or the
+  dataset — both are `.gitignore`d.

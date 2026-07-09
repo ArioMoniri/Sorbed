@@ -83,23 +83,21 @@ class WoundAnalyzer:
             image = image.with_calibration(calibration)
 
         display_image = image
+        # Color normalization stabilizes tissue *color* classification, but a
+        # learned segmentation model must see the raw image distribution it was
+        # trained on. So segmentation runs on the original image; normalization
+        # feeds only the tissue/color analysis.
         analysis_pixels = image.pixels
         if self._settings.apply_color_normalization:
             with _Timer(timings, "color_normalization"):
                 valid = image.alpha > 0.5 if image.alpha is not None else None
                 analysis_pixels = gray_world_normalize(image.pixels, valid)
-        analysis_image = RasterImage(
-            pixels=analysis_pixels,
-            metadata=image.metadata,
-            calibration=calibration,
-            alpha=image.alpha,
-        )
 
         with _Timer(timings, "skin_tone"):
             skin_tone = estimate_skin_tone(analysis_pixels)
 
         with _Timer(timings, "segmentation"):
-            seg = self._segmenter.segment(analysis_image)
+            seg = self._segmenter.segment(image)
 
         with _Timer(timings, "tissue"):
             tissue = self._tissue.classify(analysis_pixels, seg.wound_mask)
