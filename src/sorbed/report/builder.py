@@ -9,15 +9,18 @@ from pathlib import Path
 from PIL import Image
 
 from sorbed.domain.report import Report, ReportArtifact
+from sorbed.morphometrics import relative_depth_field
 from sorbed.pipeline.analyzer import AnalysisBundle
 from sorbed.report.html_report import build_html
 from sorbed.report.json_report import write_json
+from sorbed.visualize.dashboard import render_dashboard, render_depth_overlay
 from sorbed.visualize.detection import render_detection
 from sorbed.visualize.guide import render_guide, render_schematic_guide
 from sorbed.visualize.overlay import render_mask, render_schematic, render_tissue_overlay
 
 DEFAULT_ARTIFACTS = (
-    "json", "mask", "overlay", "detection", "guide", "schematic", "schematic_guide", "html",
+    "json", "mask", "overlay", "detection", "depth", "guide", "schematic",
+    "schematic_guide", "dashboard", "html",
 )
 
 
@@ -53,6 +56,20 @@ def write_report(
     if "detection" in artifacts:
         detection = render_detection(analysis, display_u8)
         written.append(_write_png(detection, out / f"{stem}_detection.png", "detection_png"))
+
+    depth_field = None
+    if "depth" in artifacts or "dashboard" in artifacts:
+        depth_field = relative_depth_field(bundle.display_image.pixels, bundle.wound_mask)
+
+    if "depth" in artifacts:
+        depth_img = render_depth_overlay(display_u8, depth_field, bundle.wound_mask)
+        written.append(_write_png(depth_img, out / f"{stem}_depth.png", "depth_png"))
+
+    if "dashboard" in artifacts:
+        dash = render_dashboard(
+            analysis, display_u8, bundle.wound_mask, bundle.tissue_label_map, depth_field
+        )
+        written.append(_write_png(dash, out / f"{stem}_dashboard.png", "dashboard_png"))
 
     if "schematic" in artifacts:
         schematic = render_schematic(bundle.tissue_label_map, bundle.wound_mask)

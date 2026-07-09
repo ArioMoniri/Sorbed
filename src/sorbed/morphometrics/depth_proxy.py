@@ -18,6 +18,30 @@ from sorbed.domain.metrics import DepthProxy
 _METHOD = "shading_gradient_v1"
 
 
+def relative_depth_field(rgb: np.ndarray, wound_mask: np.ndarray) -> np.ndarray:
+    """Per-pixel relative-depth cue in [0, 1] over the wound (0 outside).
+
+    Deeper-looking regions sit in shadow, so a pixel darker than the wound rim
+    reads as relatively deeper. This is the spatial counterpart of
+    :func:`shading_depth_proxy` and is used only for visualization; it is a
+    shading heuristic, not a physical depth measurement.
+    """
+    field = np.zeros(wound_mask.shape, dtype=np.float32)
+    if not wound_mask.any():
+        return field
+    lightness = color.rgb2lab(rgb)[..., 0] / 100.0
+    distance = ndimage.distance_transform_edt(wound_mask)
+    if distance.max() <= 0:
+        return field
+    rim = wound_mask & (distance <= max(1.0, 0.15 * distance.max()))
+    rim_l = float(lightness[rim].mean()) if rim.any() else float(lightness[wound_mask].mean())
+    depth = (rim_l - lightness) / (rim_l + 1e-6)
+    depth = np.clip(depth, 0.0, 1.0).astype(np.float32)
+    depth = ndimage.gaussian_filter(depth, 1.0)
+    field[wound_mask] = depth[wound_mask]
+    return field
+
+
 def shading_depth_proxy(rgb: np.ndarray, wound_mask: np.ndarray) -> DepthProxy | None:
     """Relative interior-vs-rim darkening of the wound, in [0, 1]."""
     if not wound_mask.any():
