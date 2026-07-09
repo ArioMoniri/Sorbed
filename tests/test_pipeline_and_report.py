@@ -64,7 +64,10 @@ def test_write_report_produces_artifacts_with_matching_hashes(tmp_path: Path):
     bundle = analyze_image(wound.to_png_bytes(), options=AnalyzeOptions(mm_per_px=0.2))
     report = write_report(bundle, tmp_path)
     kinds = {art.kind for art in report.artifacts}
-    assert {"json", "mask_png", "overlay_png", "guide_png", "schematic_png", "html"} <= kinds
+    assert {
+        "json", "mask_png", "overlay_png", "detection_png", "guide_png",
+        "schematic_png", "html",
+    } <= kinds
     for art in report.artifacts:
         data = Path(art.path).read_bytes()
         assert len(data) == art.bytes > 0

@@ -7,7 +7,7 @@ defined, so overlays, guides, and legends always agree.
 
 from __future__ import annotations
 
-from sorbed.domain.enums import TissueClass
+from sorbed.domain.enums import PressureInjuryStage, TissueClass
 
 # RGB 0-255. Hues nod to the clinical signature (red granulation, yellow slough,
 # dark eschar) while keeping luminance separated for accessibility.
@@ -29,6 +29,25 @@ LENGTH_COLOR = (0, 229, 255)
 WIDTH_COLOR = (255, 145, 0)
 SCALEBAR_COLOR = (255, 255, 255)
 
+# Per-stage box colors for the detection-style output. Distinct hues, readable
+# on wound photos, and consistent between the box and its label tab.
+
+STAGE_COLORS: dict[PressureInjuryStage, tuple[int, int, int]] = {
+    PressureInjuryStage.STAGE_1: (255, 214, 0),  # amber
+    PressureInjuryStage.STAGE_2: (255, 138, 101),  # salmon
+    PressureInjuryStage.STAGE_3: (255, 111, 0),  # orange
+    PressureInjuryStage.STAGE_4: (233, 30, 99),  # magenta-red
+    PressureInjuryStage.UNSTAGEABLE: (0, 200, 83),  # green
+    PressureInjuryStage.DEEP_TISSUE: (213, 0, 0),  # deep red
+    PressureInjuryStage.MUCOSAL: (124, 77, 255),  # violet
+    PressureInjuryStage.NOT_PRESSURE_INJURY: (120, 144, 156),  # blue-gray
+    PressureInjuryStage.INDETERMINATE: (158, 158, 158),  # gray
+}
+
 
 def tissue_color(cls: TissueClass) -> tuple[int, int, int]:
     return TISSUE_COLORS.get(cls, TISSUE_COLORS[TissueClass.UNKNOWN])
+
+
+def stage_color(stage: PressureInjuryStage) -> tuple[int, int, int]:
+    return STAGE_COLORS.get(stage, (158, 158, 158))

@@ -58,6 +58,12 @@ ml = [
     "onnxruntime>=1.17",
     "scikit-learn>=1.3",
 ]
+# Real pretrained models from the HuggingFace Hub (SAM / MedSAM segmentation).
+hf = [
+    "torch>=2.0",
+    "transformers>=4.40",
+    "huggingface-hub>=0.23",
+]
 # HTML/PDF clinician reports.
 report = [
     "jinja2>=3.1",
@@ -78,7 +84,7 @@ dev = [
     "types-PyYAML",
 ]
 all = [
-    "sorbed[formats,ml,report,api]",
+    "sorbed[formats,ml,report,api,hf]",
 ]
 
 [project.urls]
@@ -123,7 +129,7 @@ disallow_untyped_defs = true
 module = [
     "cv2.*", "skimage.*", "scipy.*", "PIL.*", "pillow_heif.*",
     "pydicom.*", "tifffile.*", "rawpy.*", "onnxruntime.*", "weasyprint.*",
-    "sklearn.*",
+    "sklearn.*", "torch.*", "transformers.*", "huggingface_hub.*",
 ]
 ignore_missing_imports = true
 

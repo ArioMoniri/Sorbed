@@ -18,10 +18,14 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="SORBED_", frozen=True, extra="forbid")
 
-    # Backends. "classical" needs no weights and always works offline.
+    # Backends. "classical" needs no weights and always works offline;
+    # "hf_sam"/"onnx" select learned backends (see docs/MODELS.md).
     segmentation_backend: str = "classical"
     tissue_backend: str = "color_model"
     staging_backend: str = "rule_engine"
+
+    # HuggingFace segmentation model id (used when segmentation_backend="hf_sam").
+    hf_model_id: str = "facebook/sam-vit-base"
 
     # Segmentation controls.
     min_wound_area_fraction: float = Field(default=0.0015, ge=0, le=1)

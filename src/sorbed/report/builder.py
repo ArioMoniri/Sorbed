@@ -12,10 +12,13 @@ from sorbed.domain.report import Report, ReportArtifact
 from sorbed.pipeline.analyzer import AnalysisBundle
 from sorbed.report.html_report import build_html
 from sorbed.report.json_report import write_json
+from sorbed.visualize.detection import render_detection
 from sorbed.visualize.guide import render_guide, render_schematic_guide
 from sorbed.visualize.overlay import render_mask, render_schematic, render_tissue_overlay
 
-DEFAULT_ARTIFACTS = ("json", "mask", "overlay", "guide", "schematic", "schematic_guide", "html")
+DEFAULT_ARTIFACTS = (
+    "json", "mask", "overlay", "detection", "guide", "schematic", "schematic_guide", "html",
+)
 
 
 def write_report(
@@ -46,6 +49,10 @@ def write_report(
     if "overlay" in artifacts:
         overlay = render_tissue_overlay(display_u8, bundle.tissue_label_map, bundle.wound_mask)
         written.append(_write_png(overlay, out / f"{stem}_overlay.png", "overlay_png"))
+
+    if "detection" in artifacts:
+        detection = render_detection(analysis, display_u8)
+        written.append(_write_png(detection, out / f"{stem}_detection.png", "detection_png"))
 
     if "schematic" in artifacts:
         schematic = render_schematic(bundle.tissue_label_map, bundle.wound_mask)

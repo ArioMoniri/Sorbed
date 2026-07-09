@@ -30,6 +30,10 @@ def build_segmenter(settings: Settings) -> WoundSegmenter:
         from sorbed.segmentation.backends.onnx_backend import OnnxSegmenter
 
         return OnnxSegmenter.from_settings(settings)
+    if name in {"hf_sam", "hf", "sam", "medsam"}:
+        from sorbed.segmentation.backends.hf_backend import HuggingFaceSAMSegmenter
+
+        return HuggingFaceSAMSegmenter.from_settings(settings)
     raise UnknownBackendError(f"unknown segmentation backend: {name!r}")
 
 

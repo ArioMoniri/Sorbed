@@ -90,3 +90,38 @@ Sorbed **never vendors model weights.** Each model is:
 - and **recorded, with its license, in a model registry** that functions as a lightweight model card for every artifact the system can load.
 
 Because a **weight-free classical backend is always available**, the system remains fully functional even when no weights have been fetched — provenance discipline never comes at the cost of a working pipeline.
+
+---
+
+## Running with real HuggingFace models (SAM / MedSAM)
+
+Sorbed ships a real learned segmentation backend that refines the wound mask with
+a promptable Segment-Anything model from the HuggingFace Hub. The weight-free
+classical proposal supplies a bounding-box prompt; the model returns a precise
+mask and its own predicted IoU, which Sorbed uses as the segmentation confidence
+(a genuine model-derived value).
+
+```bash
+pip install -e '.[hf]'                        # torch + transformers + huggingface-hub
+export SORBED_SEGMENTATION_BACKEND=hf_sam
+export SORBED_HF_MODEL_ID=facebook/sam-vit-base          # or a medical variant:
+# export SORBED_HF_MODEL_ID=flaviagiammarino/medsam-vit-base
+sorbed analyze wound.jpg --mm-per-px 0.15 --out reports
+```
+
+Verified real, permissively-licensed Hub models usable as drop-in prompts:
+
+| Model id | What it is | License |
+|---|---|---|
+| `facebook/sam-vit-base` | Segment Anything (ViT-B), promptable, class-agnostic | Apache-2.0 |
+| `flaviagiammarino/medsam-vit-base` | MedSAM, box-prompted medical SAM | Apache-2.0 |
+
+Weights download on first use and are cached under the HuggingFace cache; nothing
+is vendored, and the resolved Hub commit is recorded in the report's provenance.
+
+> **Network note.** The backend needs outbound access to `huggingface.co`. Some
+> managed/sandboxed environments firewall it; in that case pre-download the model
+> in a networked environment (`huggingface-cli download <id>`) and point
+> `HF_HOME` at the shared cache, or run Sorbed where the Hub is reachable. Sorbed
+> never fabricates a result when a model cannot be loaded — it raises a clear
+> error and the classical backend remains available offline.
