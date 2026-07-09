@@ -46,14 +46,28 @@ class ModelsResponse(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    """Wrapper around a serialized analysis plus an optional annotated guide."""
+    """Wrapper around a serialized analysis plus rendered panels."""
 
     analysis: dict[str, Any] = Field(
         description="The WoundAnalysis serialized with model_dump(mode='json')."
     )
+    images: dict[str, str] = Field(
+        default_factory=dict,
+        description="Rendered panels (input/mask/overlay/detection/depth/schematic) "
+        "as PNG data URIs; empty when images were not requested.",
+    )
     guide_png_base64: str | None = Field(
         default=None,
         description="Base64-encoded PNG of the annotated guide when requested.",
+    )
+
+
+class TrendResponse(BaseModel):
+    """A healing trend across visits plus per-visit thumbnails."""
+
+    trend: dict[str, Any] = Field(description="The serialized HealingTrend.")
+    thumbnails: list[str] = Field(
+        default_factory=list, description="Per-visit detection thumbnails as data URIs."
     )
 
 

@@ -7,12 +7,15 @@ the box.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from sorbed.api.deps import ApiSettings
@@ -60,8 +63,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(meta.router, prefix="/v1")
     app.include_router(analyze.router, prefix="/v1")
 
+    _mount_web_ui(app)
     _install_error_handlers(app)
     return app
+
+
+def _mount_web_ui(app: FastAPI) -> None:
+    """Serve the single-page web UI and its static assets, if present."""
+    static_dir = Path(__file__).resolve().parent / "static"
+    index = static_dir / "index.html"
+    if not index.is_file():
+        return
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    @app.get("/", include_in_schema=False)
+    async def _index() -> FileResponse:
+        return FileResponse(index)
 
 
 def _install_error_handlers(app: FastAPI) -> None:

@@ -169,6 +169,22 @@ def inspect(
 
 
 @app.command()
+def serve(
+    host: Annotated[str, typer.Option("--host", help="Bind address.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", "-p", help="Port.")] = 8000,
+    reload: Annotated[bool, typer.Option("--reload", help="Auto-reload on code changes.")] = False,
+) -> None:
+    """Launch the web UI and HTTP API (needs the 'api' extra)."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        err_console.print("[red]The API needs the 'api' extra:[/red] pip install 'sorbed[api]'")
+        raise typer.Exit(1) from exc
+    console.print(f"[green]Sorbed[/green] web UI + API on http://{host}:{port}  (Ctrl-C to stop)")
+    uvicorn.run("sorbed.api.app:app", host=host, port=port, reload=reload)
+
+
+@app.command()
 def formats() -> None:
     """List image formats and whether a decoder for each is available."""
     table = Table("Format", "Available")
