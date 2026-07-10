@@ -14,7 +14,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -68,17 +68,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+class _RevalidateStaticFiles(StaticFiles):
+    """Serve static assets with ``Cache-Control: no-cache``.
+
+    The SPA's HTML/CSS/JS evolve without content-hashed filenames, so browsers
+    must revalidate on every load rather than apply heuristic freshness — a
+    stale ``app.js`` otherwise masks a fixed one. ``no-cache`` still permits a
+    conditional request (ETag/If-None-Match), so unchanged files return a cheap
+    304 while changed files are re-fetched.
+    """
+
+    def file_response(self, *args: object, **kwargs: object) -> Response:
+        response = super().file_response(*args, **kwargs)  # type: ignore[arg-type]
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def _mount_web_ui(app: FastAPI) -> None:
     """Serve the single-page web UI and its static assets, if present."""
     static_dir = Path(__file__).resolve().parent / "static"
     index = static_dir / "index.html"
     if not index.is_file():
         return
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    app.mount("/static", _RevalidateStaticFiles(directory=static_dir), name="static")
 
     @app.get("/", include_in_schema=False)
     async def _index() -> FileResponse:
-        return FileResponse(index)
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
 def _install_error_handlers(app: FastAPI) -> None:
