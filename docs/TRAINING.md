@@ -56,7 +56,8 @@ python scripts/train_segmenter.py \
     --batch-size 8 \
     --lr 1e-3 \
     --input-size 512 \
-    --encoder efficientnet-b0
+    --encoder efficientnet-b0 \
+    --decoder-attention scse
 ```
 
 The script builds a U-Net (ImageNet-pretrained EfficientNet-b0 encoder), trains
@@ -64,6 +65,28 @@ with a combined **Dice + BCE** loss, holds out a validation split, reports
 **per-epoch validation Dice**, and checkpoints the best model to
 `artifacts/segmenter/best.pt`. Use `--device cpu` to force CPU, or `cuda` for a
 GPU; `auto` (default) picks CUDA when available.
+
+### scSE decoder attention (`--decoder-attention`)
+
+`scse` (the default) inserts **spatial-and-channel Squeeze-and-Excitation**
+blocks into every decoder stage. scSE recalibrates decoder features by *what*
+(a channel-gating branch) and *where* (a spatial-gating branch) jointly, and is
+the attention mechanism the **FUSegNet** line uses to reach state of the art on
+the AZH/FUSeg chronic-wound benchmark (data-based DSC 92.70% with an
+EfficientNet-b7 encoder + parallel-scSE; Dhar et al., *Biomed. Signal Process.
+Control*, 2024). Pass `--decoder-attention none` for a plain U-Net baseline. To
+approach the published numbers, use a larger pretrained encoder and full-size
+inputs:
+
+```bash
+python scripts/train_segmenter.py --images imgs/ --masks masks/ \
+    --encoder efficientnet-b4 --encoder-weights imagenet \
+    --input-size 512 --decoder-attention scse --epochs 80
+```
+
+Encoder weights (`imagenet`) download from the PyTorch Hub; where that host is
+blocked, train from scratch with `--encoder-weights none` (lower accuracy) or
+supply local weights.
 
 ## 4. Export to ONNX
 

@@ -72,6 +72,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Pretrained encoder weights ('imagenet') or 'none' to train from scratch "
         "(use 'none' in environments without access to the weight host).",
     )
+    parser.add_argument(
+        "--decoder-attention",
+        type=str,
+        default="scse",
+        choices=["none", "scse"],
+        help="Decoder attention. 'scse' adds spatial-and-channel Squeeze-and-Excitation "
+             "blocks (Roy et al., MICCAI 2018) to each decoder stage — the mechanism the "
+             "FUSegNet line uses to reach SOTA on the AZH/FUSeg chronic-wound benchmark.",
+    )
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument(
@@ -201,9 +210,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     encoder_weights = None if args.encoder_weights.lower() == "none" else args.encoder_weights
+    decoder_attention = None if args.decoder_attention == "none" else args.decoder_attention
     model = smp.Unet(
         encoder_name=args.encoder,
         encoder_weights=encoder_weights,
+        decoder_attention_type=decoder_attention,
         in_channels=3,
         classes=1,
     ).to(device)
@@ -248,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "model_state": model.state_dict(),
                     "encoder": args.encoder,
+                    "decoder_attention": decoder_attention,
                     "input_size": size,
                     "val_dice": val_dice,
                     "epoch": epoch,

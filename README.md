@@ -45,9 +45,15 @@ pip install -e .                 # core: the classical pipeline, CLI, no downloa
 pip install -e .[formats]        # HEIC/HEIF, DICOM, camera RAW, BigTIFF decoders
 pip install -e .[ml]             # optional ONNX learned backends
 pip install -e .[api]            # the FastAPI service
-pip install -e .[report]         # PDF reports
+pip install -e .[pdf]            # PDF grading & follow-up reports (headless Chromium)
 pip install -e .[dev]            # ruff, mypy, pytest, hypothesis
-pip install -e .[all]            # formats + ml + report + api
+pip install -e .[all]            # formats + ml + pdf + api + hf
+```
+
+After installing the `[pdf]` extra, fetch the Chromium build once:
+
+```bash
+playwright install chromium
 ```
 
 ## Quickstart
@@ -85,8 +91,40 @@ Every artifact is a *rendering* of one canonical JSON record — nothing downstr
 | Schematic guide | `*_schematic_guide.png` | The schematic with measurements and labels. |
 | JSON | `*.json` | Canonical `WoundAnalysis` — the single source of truth. |
 | HTML | `*.html` | Self-contained clinician report. |
+| PDF (grade) | `*_grading.pdf` | Directive-grounded grading report (needs `[pdf]`). |
+| PDF (follow-up) | `*_followup.pdf` | Longitudinal healing report with trend charts + alerts. |
 
 Pick a subset with `--format mask,json` or take them all with `--format all` (the default).
+
+## Clinical directive grounding 📋
+
+Sorbed can ground every report in a hospital's *own* pressure-injury directive rather than a generic rulebook. A **directive pack** is that guideline — for example an institutional NPIAP/EPUAP-aligned protocol — distilled from its PDF into citable, numbered sections plus the guideline's own figures:
+
+```bash
+python scripts/build_directive_pack.py --pdf HD_T86_REV10.pdf --slug my_hospital
+export SORBED_DIRECTIVE_PACK=var/directive_packs/my_hospital
+```
+
+The analysis is then mapped onto the directive's criteria: the staging definition **and** the guideline's own illustration for the detected stage, its tissue-colour (red-yellow-black) model, sizing and PUSH guidance, and the reassessment cadence — each with a section/page citation. Institutional directive content is loaded at runtime and is never vendored into this repository. This is what makes the model "tuned to a local clinical protocol": swap the pack, and the same engine speaks your unit's guideline.
+
+## PDF reports & healing follow-up 📈
+
+Two print-ready, self-contained PDFs (modern layout, Manrope, grade- and confidence-based colouring), rendered by headless Chromium:
+
+- **Grading report** — the grade and calibrated confidence, the uploaded photo beside the model's tissue/detection/depth panels, measurements, the tissue-composition bar, and the directive's staging criterion, tissue-colour model, and care/reassessment cadence with citations.
+- **Follow-up report** — a better/worse verdict banner with a healing gauge, vector trend charts (wound area with a projected-closure line, tissue mix over visits, PUSH total), directive-cited **clinical alerts** ("wound surface enlarging", "PUSH total falling", "devitalized tissue increasing", "stage progression"), and a per-visit timeline.
+
+Longitudinal analytics track granulation and full tissue composition, surface area (cm² when calibrated), PUSH, percent area reduction, the validated 4-week PAR predictor, and the Gilman perimeter-normalized healing rate — see [`docs/TREND.md`](docs/TREND.md).
+
+## Clinical workflow: autograde on upload + QA 🏥
+
+The target workflow mirrors how wound imaging actually flows through an EHR. Today a nurse photographs the wound, uploads it, and *types in a stage* — which a central quality office frequently has to re-check and correct. Sorbed is designed to slot into that loop as decision support:
+
+1. **On upload**, autograde the image and pre-fill a provisional stage, size, tissue composition, and a directive-cited rationale — so the human starts from a structured draft instead of a blank field.
+2. **Human-in-the-loop:** the nurse confirms or edits; low-confidence or out-of-distribution images (bad lighting, obscured bed) **abstain** and route to review rather than forcing a stage.
+3. **Follow-up** runs automatically across a patient's visits, surfacing the healing trajectory and better/worse alerts to the QA office instead of manual chart review.
+
+Everything remains decision support — a clinician owns the final determination.
 
 ## How the grade is decided 🧭
 
@@ -112,6 +150,25 @@ Run `sorbed formats` to see what is installed on your machine.
 ## Models & the data reality
 
 Wound imaging is data-poor, and pressure-injury *staging* is its poorest corner: no large, public, permissively-licensed staging dataset could be verified to exist, and the strong published numbers come from private single-center sets under noisy ground truth (human raters agree only 23–58% of the time). That is exactly why Sorbed ships staging as decision support with explicit uncertainty, keeps a weight-free classical backend that always works offline, and — when learned ONNX backends are enabled — downloads weights only on request, verifies them by sha256, and records each in a provenance registry. The honest, cited accounting lives in [`docs/MODELS.md`](docs/MODELS.md).
+
+**Segmentation.** For *wound-area segmentation* — unlike staging — real public benchmarks exist. Sorbed's learned segmenter is trained on the **AZH Chronic Wound / MICCAI-2021 FUSeg** foot-ulcer datasets (real clinical photographs), and the training path supports the architecture that leads that benchmark: a U-Net with an EfficientNet encoder and **scSE** (spatial-and-channel Squeeze-and-Excitation) decoder attention — the mechanism the FUSegNet line uses to reach SOTA.
+
+| Approach | Data-based DSC | Notes |
+|---|---|---|
+| FUSegNet (EfficientNet-b7 + P-scSE) | **92.70%** | Dhar et al., *Biomed. Signal Process. Control* 2024 |
+| x-FUSegNet (5-fold ensemble) | 89.23% | tops the FUSeg-2021 challenge leaderboard |
+| LinkNet-EffB1 + UNet-EffB2 (ensemble) | 92.07% | Mahbod et al. |
+| DeepLabV3+ / PSPNet / MANet | 91–92% | strong baselines |
+| U-Net + scSE | 91.85% | scSE over plain U-Net (90.88%) |
+
+Train with the attention on real data (see [`docs/TRAINING.md`](docs/TRAINING.md)):
+
+```bash
+python scripts/train_segmenter.py --images imgs/ --masks masks/ \
+    --encoder efficientnet-b4 --decoder-attention scse
+```
+
+For a broader, cited survey of 2024–2026 model and system designs — promptable foundation models (SAM / MedSAM / MedSAM-2), on-device staging (YOLOv8), skin-tone equity, and the EHR/regulatory picture (FDA SaMD, EU MDR + AI Act, Singapore HSA) — see [`docs/MODELS.md`](docs/MODELS.md).
 
 ## API
 

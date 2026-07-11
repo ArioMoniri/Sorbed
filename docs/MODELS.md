@@ -125,3 +125,91 @@ is vendored, and the resolved Hub commit is recorded in the report's provenance.
 > `HF_HOME` at the shared cache, or run Sorbed where the Hub is reachable. Sorbed
 > never fabricates a result when a model cannot be loaded — it raises a clear
 > error and the classical backend remains available offline.
+
+## SOTA landscape (2024–2026)
+
+A cited survey of the model and system designs Sorbed positions against. Figures
+are from published literature; where a single source or an unverified value is
+involved it is flagged.
+
+### Wound-area segmentation
+
+Real public benchmarks exist here (unlike staging). The reference datasets are
+the **AZH Chronic Wound** set (1,010 foot-ulcer images, UW-Milwaukee + AZH Wound
+& Vascular Center) and the **MICCAI-2021 FUSeg Challenge** set (1,210 images from
+889 patients; Wang et al., *MDPI Information* 15(3):140, 2024).
+
+- **FUSegNet / x-FUSegNet** (Dhar et al., *Biomed. Signal Process. Control*, 2024;
+  arXiv:2305.02961; `github.com/mrinal054/FUSegNet`). An encoder–decoder with a
+  pretrained **EfficientNet-b7** encoder and a **P-scSE** ("parallel scSE")
+  attention block in each decoder stage, combining *additive* and *max-out* scSE
+  fusions. Reports **data-based DSC 92.70%** on AZH; the 5-fold ensemble
+  **x-FUSegNet tops the FUSeg-2021 leaderboard at 89.23%**. (Image-based DSC is
+  reported in the mid-80s; exact value unverified here.)
+- **scSE** (Roy, Navab & Wachinger, MICCAI 2018; arXiv:1803.02579). Channel SE
+  (cSE) gates *which channels* matter via global pooling; spatial SE (sSE) gates
+  *where* via a 1×1 convolution; concurrent scSE fuses both and beats either
+  alone on segmentation. Sorbed's trainer exposes scSE via `--decoder-attention`.
+- Strong baselines in this literature: LinkNet/U-Net with EfficientNet or DenseNet
+  backbones, DeepLabV3+, MANet, PSPNet, TransUNet.
+
+### Promptable foundation models
+
+**SAM** (Kirillov et al., 2023), **SAM 2** (2024), **MedSAM** (Ma, Wang et al.,
+*Nature Communications*, 2024), and **MedSAM-2** (2025) are powerful but
+fundamentally **promptable** — a human supplies a box/point and quality is
+prompt-sensitive; they do not assign semantic class labels. For an *unattended*
+EHR upload, a dedicated supervised segmenter (FUSegNet-class) gives the automatic
+mask that prompt-free operation needs; auto-prompting SAM variants
+(Self-Prompt-SAM, MedSAM-U) are an active but not-yet-canonical direction, and no
+widely-benchmarked wound-specific SAM fine-tune was identified as of early 2026.
+
+### Photo-based staging
+
+- **MDPI *Applied Sciences* 2024, 14(16):7124** (Chang et al.): an on-device
+  **YOLOv8** pipeline that localizes and classifies six severities (Stage 1–4,
+  DTPI, Unstageable) on 2,800 images — **YOLOv8m: 84.6% accuracy, mAP@50 90.8%**.
+- **JMIR Med Inform 2025, e62774**: CNNs on 853→7,677 augmented images;
+  **DenseNet121 93.71%** best (single-source figure — verify).
+
+**Central validity caveat.** Staging is defined by *depth* and *what tissue is
+visible*. A flat RGB photo has no true depth and cannot see under obscuring
+slough/eschar, so Stage 3/4, DTPI, and Unstageable are intrinsically error-prone
+from photography; high reported accuracies are usually on curated, class-balanced
+sets and do not transfer to ambiguous real-world cases. This is why Sorbed damps
+depth-dependent grades and abstains rather than forcing them.
+
+### Skin-tone equity
+
+Stage 1 and DTPI are defined by **erythema**, which is harder to see in Fitzpatrick
+V–VI skin (injury presents as hyperpigmentation instead), so photo models trained
+on light-skinned data systematically under-detect them (NPIAP, *Perspectives on
+pressure injuries in dark skin tones*; AJN 2023). Mitigations: tone-robust sensing
+(long-wave thermography detects abnormalities at comparable rates across tones —
+85% of Fitzpatrick I–III vs 82% of IV–VI; PMC12689484), SEM devices, deliberate
+Fitzpatrick/ITA sampling, and **per-tone stratified metric reporting**. A
+Singapore (Chinese/Malay/Indian, ~Fitzpatrick III–V) deployment should re-validate
+locally with per-ITA metrics.
+
+### System & regulatory framing
+
+Interoperability via **HL7 FHIR** (Observation/DiagnosticReport for mobile wound
+photos) and **DICOM** (now with an AI-Results object type + IHE AI-Workflow
+profiles). Keep AI output as a clinician-confirmed **draft** with an audit trail;
+report calibrated confidence and **abstain/route-to-clinician** on low-confidence
+or out-of-distribution inputs; publish a **model card** (Mitchell et al., 2019).
+Regulatory: software that outputs a specific stage/recommendation is generally
+**Software as a Medical Device** — US **FDA** 510(k) + Predetermined Change
+Control Plans (Jan 2025 draft AI guidance); **EU** MDR 2017/745 + the AI Act
+(medical AI = high-risk); **Singapore HSA** *Regulatory Guidance for Software
+Medical Devices — A Lifecycle Approach* (Apr 2022, rev Mar 2024), with a dedicated
+AI-MD section — the governing document for a Singapore deployment.
+
+### Longitudinal metrics
+
+Percent area reduction and the validated **4-week PAR predictor** (~50% for
+diabetic-foot ulcers, Sheehan et al., *Diabetes Care* 2003; ~40% for venous leg
+ulcers, Kantor & Margolis); **Gilman** perimeter-normalized healing rate
+(size/shape-independent; Gilman, *Wounds* 1990); and the structured scores
+**PUSH** (0–17), **BWAT**, and **DESIGN-R**. Sorbed computes PAR, the 4-week
+predictor, the Gilman rate, and a partial PUSH — see [`TREND.md`](TREND.md).
