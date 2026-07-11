@@ -152,6 +152,23 @@ the **AZH Chronic Wound** set (1,010 foot-ulcer images, UW-Milwaukee + AZH Wound
   alone on segmentation. Sorbed's trainer exposes scSE via `--decoder-attention`.
 - Strong baselines in this literature: LinkNet/U-Net with EfficientNet or DenseNet
   backbones, DeepLabV3+, MANet, PSPNet, TransUNet.
+- **Transformer encoders (2024→2026).** For 2D RGB wound photos the field has
+  moved toward transformer backbones — **SegFormer / MiT**, Swin-UNet, and hybrids.
+  The 2025 real-world wound benchmark **WoundAmbit** (ECML-PKDD 2025;
+  arXiv:2504.06185) finds transformer backbones (TransNeXt, ConvNeXt, VWFormer,
+  SegFormer) competitive-to-best; a HarDNet–transformer hybrid (arXiv:2410.03359)
+  claims to surpass FUSegNet. Sorbed's trainer exposes this via `--arch segformer
+  --encoder mit_b2/mit_b3` (ONNX-exportable), alongside the CNN FUSegNet recipe.
+- **CNNs are still the baseline to beat.** *nnU-Net Revisited* (MICCAI 2024;
+  arXiv:2404.09556) shows that under matched validation, well-configured CNN U-Nets
+  (ResEnc, MedNeXt, STU-Net) beat transformer **and** Mamba variants — though that
+  study is 3D-from-scratch, so for 2D pretrained wound photos transformer encoders
+  remain a legitimate modern choice. Present both; declare neither universally
+  superior.
+- **State-space / Mamba (U-Mamba, VM-UNet arXiv:2402.02491, Swin-UMamba MICCAI
+  2024, Mamba-UNet): roadmap only.** The nnU-Net Revisited ablation found the Mamba
+  layers themselves contributed no gain (the residual U-Net wrapper did); no mature
+  ONNX/CPU path. Not a "we use this" claim.
 
 ### Promptable foundation models
 
@@ -163,6 +180,10 @@ EHR upload, a dedicated supervised segmenter (FUSegNet-class) gives the automati
 mask that prompt-free operation needs; auto-prompting SAM variants
 (Self-Prompt-SAM, MedSAM-U) are an active but not-yet-canonical direction, and no
 widely-benchmarked wound-specific SAM fine-tune was identified as of early 2026.
+**BiomedParse** (Microsoft; *Nature Methods* 2025, arXiv:2405.12971) is a
+text-promptable joint segment/detect/recognise model across nine modalities —
+impressive but GPU/text-driven, not a drop-in CPU-ONNX single-class wound masker.
+These belong on the roadmap, not in the shipped CPU pipeline.
 
 ### Photo-based staging
 
@@ -187,9 +208,12 @@ on light-skinned data systematically under-detect them (NPIAP, *Perspectives on
 pressure injuries in dark skin tones*; AJN 2023). Mitigations: tone-robust sensing
 (long-wave thermography detects abnormalities at comparable rates across tones —
 85% of Fitzpatrick I–III vs 82% of IV–VI; PMC12689484), SEM devices, deliberate
-Fitzpatrick/ITA sampling, and **per-tone stratified metric reporting**. A
-Singapore (Chinese/Malay/Indian, ~Fitzpatrick III–V) deployment should re-validate
-locally with per-ITA metrics.
+Fitzpatrick/ITA sampling, and **per-tone stratified metric reporting**. For a
+**Türkiye** deployment the population is predominantly Fitzpatrick II–IV, so the
+erythema-visibility gap is less extreme than in more diverse settings — but it is
+not eliminated (the darker, Fitzpatrick-IV end and darker-skinned residents still
+warrant the ITA safeguard), and local re-validation with per-tone metrics remains
+the right practice.
 
 ### System & regulatory framing
 
@@ -201,9 +225,11 @@ or out-of-distribution inputs; publish a **model card** (Mitchell et al., 2019).
 Regulatory: software that outputs a specific stage/recommendation is generally
 **Software as a Medical Device** — US **FDA** 510(k) + Predetermined Change
 Control Plans (Jan 2025 draft AI guidance); **EU** MDR 2017/745 + the AI Act
-(medical AI = high-risk); **Singapore HSA** *Regulatory Guidance for Software
-Medical Devices — A Lifecycle Approach* (Apr 2022, rev Mar 2024), with a dedicated
-AI-MD section — the governing document for a Singapore deployment.
+(medical AI = high-risk). A **Türkiye** deployment falls under the Turkish
+medical-device regulation (Tıbbi Cihaz Yönetmeliği), which is **harmonised with
+EU MDR 2017/745** and administered by **TİTCK** (Türkiye İlaç ve Tıbbi Cihaz
+Kurumu); positioning the tool as clinician decision support with human-in-the-loop
+confirmation and abstention keeps it out of autonomous-diagnosis territory.
 
 ### Longitudinal metrics
 

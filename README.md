@@ -153,7 +153,7 @@ Run `sorbed formats` to see what is installed on your machine.
 
 Wound imaging is data-poor, and pressure-injury *staging* is its poorest corner: no large, public, permissively-licensed staging dataset could be verified to exist, and the strong published numbers come from private single-center sets under noisy ground truth (human raters agree only 23–58% of the time). That is exactly why Sorbed ships staging as decision support with explicit uncertainty, keeps a weight-free classical backend that always works offline, and — when learned ONNX backends are enabled — downloads weights only on request, verifies them by sha256, and records each in a provenance registry. The honest, cited accounting lives in [`docs/MODELS.md`](docs/MODELS.md).
 
-**Segmentation.** For *wound-area segmentation* — unlike staging — real public benchmarks exist. Sorbed's learned segmenter is trained on the **AZH Chronic Wound / MICCAI-2021 FUSeg** foot-ulcer datasets (real clinical photographs), and the training path supports the architecture that leads that benchmark: a U-Net with an EfficientNet encoder and **scSE** (spatial-and-channel Squeeze-and-Excitation) decoder attention — the mechanism the FUSegNet line uses to reach SOTA.
+**Segmentation.** For *wound-area segmentation* — unlike staging — real public benchmarks exist. Sorbed's learned segmenter is trained on the **AZH Chronic Wound / MICCAI-2021 FUSeg** foot-ulcer datasets (real clinical photographs). The trainer (segmentation-models-pytorch) supports both the CNN **FUSegNet line** (U-Net / DeepLabV3+ / MAnet with EfficientNet or ResNet encoders, plus **scSE** decoder attention) **and** modern **transformer** encoders (**SegFormer / MiT-b***), all ONNX-exportable for CPU inference. The roadmap targets nnU-Net-style self-configuration and Mamba / SAM-2 / BiomedParse medical foundation models (not yet integrated).
 
 | Approach | Data-based DSC | Notes |
 |---|---|---|
@@ -166,11 +166,16 @@ Wound imaging is data-poor, and pressure-injury *staging* is its poorest corner:
 Train with the attention on real data (see [`docs/TRAINING.md`](docs/TRAINING.md)):
 
 ```bash
+# CNN FUSegNet-line recipe
 python scripts/train_segmenter.py --images imgs/ --masks masks/ \
-    --encoder efficientnet-b4 --decoder-attention scse
+    --arch unet --encoder efficientnet-b4 --decoder-attention scse
+
+# modern transformer recipe (SegFormer + MiT encoder)
+python scripts/train_segmenter.py --images imgs/ --masks masks/ \
+    --arch segformer --encoder mit_b2
 ```
 
-For a broader, cited survey of 2024–2026 model and system designs — promptable foundation models (SAM / MedSAM / MedSAM-2), on-device staging (YOLOv8), skin-tone equity, and the EHR/regulatory picture (FDA SaMD, EU MDR + AI Act, Singapore HSA) — see [`docs/MODELS.md`](docs/MODELS.md).
+For a broader, cited survey of 2024–2026 model and system designs — promptable foundation models (SAM / MedSAM / MedSAM-2), state-space (Mamba) segmenters, on-device staging (YOLOv8), skin-tone equity, and the EHR/regulatory picture (FDA SaMD, EU MDR + AI Act, and EU-MDR-harmonised Turkish medical-device regulation / TİTCK) — see [`docs/MODELS.md`](docs/MODELS.md).
 
 ## API
 

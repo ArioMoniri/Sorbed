@@ -60,11 +60,36 @@ python scripts/train_segmenter.py \
     --decoder-attention scse
 ```
 
-The script builds a U-Net (ImageNet-pretrained EfficientNet-b0 encoder), trains
-with a combined **Dice + BCE** loss, holds out a validation split, reports
-**per-epoch validation Dice**, and checkpoints the best model to
-`artifacts/segmenter/best.pt`. Use `--device cpu` to force CPU, or `cuda` for a
-GPU; `auto` (default) picks CUDA when available.
+The script builds the chosen architecture (default: a U-Net with an
+ImageNet-pretrained EfficientNet-b0 encoder), trains with a combined **Dice +
+BCE** loss, holds out a validation split, reports **per-epoch validation Dice**,
+and checkpoints the best model to `artifacts/segmenter/best.pt`. Use `--device
+cpu` to force CPU, or `cuda` for a GPU; `auto` (default) picks CUDA when
+available.
+
+### Architecture (`--arch`)
+
+Routed through `segmentation-models-pytorch`, so you can pick the recipe:
+
+| `--arch` | Recipe | Notes |
+|---|---|---|
+| `unet` (default) | U-Net + EfficientNet encoder + scSE | the FUSegNet-line CNN recipe |
+| `deeplabv3plus`, `manet` | strong CNN alternatives | with EfficientNet/ResNet encoders |
+| `segformer` | **SegFormer transformer** | pair with a MiT encoder: `--encoder mit_b2` (CPU-reasonable, ~25M) or `mit_b3` |
+
+All architectures export to ONNX for CPU inference. `--decoder-attention scse`
+applies only to `unet`/`unetplusplus`; it is ignored by the others. The modern
+transformer recipe is:
+
+```bash
+python scripts/train_segmenter.py --images imgs/ --masks masks/ \
+    --arch segformer --encoder mit_b2 --encoder-weights imagenet --input-size 512
+```
+
+The perennial CNN baseline (nnU-Net) and state-space (Mamba) / promptable
+foundation models (SAM-2, MedSAM-2, BiomedParse) are the current frontier but are
+**not** integrated here — they are GPU/prompt-oriented and outside `smp`. See
+[`MODELS.md`](MODELS.md) for the cited landscape.
 
 ### scSE decoder attention (`--decoder-attention`)
 

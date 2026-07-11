@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Segmentation trainer gains `--decoder-attention scse` (spatial-and-channel
   Squeeze-and-Excitation), the FUSegNet-style attention, plus documented
   EfficientNet-encoder training toward the AZH/FUSeg benchmark.
+- Segmentation trainer gains `--arch` (routed through segmentation-models-pytorch):
+  the CNN FUSegNet line (`unet`/`deeplabv3plus`/`manet`) **and** the modern
+  transformer recipe (`segformer` with a MiT encoder, e.g. `--encoder mit_b2`),
+  all ONNX-exportable. Docs record the 2024–2026 landscape (nnU-Net, Mamba,
+  SAM-2 / MedSAM-2 / BiomedParse) as roadmap, not shipped.
 
 <!--
 Template for future releases:

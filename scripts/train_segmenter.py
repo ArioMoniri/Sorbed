@@ -64,6 +64,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--input-size", type=int, default=512, help="square H=W input")
     parser.add_argument("--val-fraction", type=float, default=0.2)
+    parser.add_argument(
+        "--arch",
+        type=str,
+        default="unet",
+        choices=["unet", "unetplusplus", "deeplabv3plus", "manet", "segformer"],
+        help="Segmentation architecture (segmentation-models-pytorch). 'unet' + an "
+             "EfficientNet encoder + scSE is the FUSegNet-line CNN recipe; 'segformer' "
+             "with a MiT encoder (--encoder mit_b2/mit_b3) is the modern transformer "
+             "recipe. All export to ONNX for CPU inference.",
+    )
     parser.add_argument("--encoder", type=str, default="efficientnet-b0")
     parser.add_argument(
         "--encoder-weights",
@@ -211,13 +221,17 @@ def main(argv: list[str] | None = None) -> int:
 
     encoder_weights = None if args.encoder_weights.lower() == "none" else args.encoder_weights
     decoder_attention = None if args.decoder_attention == "none" else args.decoder_attention
-    model = smp.Unet(
-        encoder_name=args.encoder,
-        encoder_weights=encoder_weights,
-        decoder_attention_type=decoder_attention,
-        in_channels=3,
-        classes=1,
-    ).to(device)
+    # scSE decoder attention is only defined for the U-Net family; other
+    # architectures (SegFormer, DeepLabV3+, MAnet) ignore it.
+    model_kwargs: dict = {
+        "encoder_name": args.encoder,
+        "encoder_weights": encoder_weights,
+        "in_channels": 3,
+        "classes": 1,
+    }
+    if args.arch in ("unet", "unetplusplus") and decoder_attention is not None:
+        model_kwargs["decoder_attention_type"] = decoder_attention
+    model = smp.create_model(args.arch, **model_kwargs).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -258,6 +272,7 @@ def main(argv: list[str] | None = None) -> int:
             torch.save(
                 {
                     "model_state": model.state_dict(),
+                    "arch": args.arch,
                     "encoder": args.encoder,
                     "decoder_attention": decoder_attention,
                     "input_size": size,
