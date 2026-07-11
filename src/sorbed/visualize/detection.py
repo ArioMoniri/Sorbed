@@ -47,11 +47,10 @@ def render_detection(
 
 
 def _label(analysis: WoundAnalysis) -> str:
-    d = analysis.decision
-    stage = d.stage.value.replace("_", " ")
-    if d.abstained:
-        return f"{stage} (review)"
-    return f"{stage}  {d.confidence:.2f}"
+    # Localization only — a neutral "wound" tab. The grade and confidence live in
+    # exactly one place (the report hero); burning them onto the photo as well
+    # over-emphasises an uncertain, depth-dependent call.
+    return "yara · wound"
 
 
 def _banner(draw: ImageDraw.ImageDraw, width: int, text: str, color: tuple[int, int, int]) -> None:

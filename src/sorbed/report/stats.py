@@ -3,9 +3,17 @@
 Every value here is a deterministic derivation of fields already on a
 :class:`WoundAnalysis` (or a :class:`HealingTrend`) — no new measurement and
 nothing fabricated. Tissue fractions are normalised to the wound *bed*
-(everything except intact skin) before viability ratios are computed, per
-wound-bed-preparation practice. Composite indices and proxies are labelled as
-such; thresholds are named constants, not inline literals.
+(everything except intact peri-wound skin and background) before viability
+ratios are computed; the raw whole-frame fractions remain available so the
+denominator switch is transparent.
+
+Design follows a strict wound-care review: the report must never turn a tissue
+under-detection into false reassurance. So when the model reports essentially no
+slough/eschar while granulation dominates — the classic signature of a
+classifier that cannot separate thin fibrin/slough from granulation — that is
+surfaced as an explicit *under-detection* signal rather than a "perfect bed".
+No composite 0-100 "quality score", no photo-derived volume, and no
+"undermining" claim (invisible in 2D) are emitted here.
 """
 
 from __future__ import annotations
@@ -18,22 +26,13 @@ from sorbed.trend.models import HealingTrend
 
 _EPS = 1e-6
 
-# Wound-bed quality (WBQ) weights — a readable composite index (0-100), NOT a
-# validated score. Viable tissue rewarded, devitalized tissue penalised.
-_WBQ_WEIGHTS: dict[TissueClass, float] = {
-    TissueClass.GRANULATION: 1.0,
-    TissueClass.EPITHELIAL: 1.0,
-    TissueClass.ADIPOSE: 0.3,
-    TissueClass.SLOUGH: -0.5,
-    TissueClass.ESCHAR: -1.0,
-}
-# Necrotic-burden red-flag triggers.
-_ESCHAR_FLAG = 0.25
-_NONVIABLE_FLAG = 0.50
-# Edge-shape descriptors.
-_IRREGULAR_CIRCULARITY = 0.60
-_UNDERMINING_SOLIDITY = 0.85
-_ELONGATION_RATIO = 3.0
+# Under-detection signature: (slough+eschar) essentially absent while granulation
+# dominates the bed — treat the reassuring viability numbers with suspicion.
+_UNDERDETECT_NONVIABLE = 0.02
+_UNDERDETECT_GRAN = 0.50
+# Necrotic-burden grading over the bed (graded, not a single permissive gate).
+_NONVIABLE_CAUTION = 0.20
+_NONVIABLE_HIGH = 0.50
 # Healing-velocity bands (% wound area change per week; negative = shrinking).
 _VEL_HEALING = -10.0
 _VEL_STALL = -3.0
@@ -56,22 +55,18 @@ class TissueArea(BaseModel):
     area_cm2: float | None
 
 
-class Flag(BaseModel):
-    model_config = ConfigDict(frozen=True)
-    label: str
-    active: bool
-    detail: str = ""
-
-
 class GradingStats(BaseModel):
     model_config = ConfigDict(frozen=True)
     viability: ViabilitySplit
     tissue_areas: tuple[TissueArea, ...]
-    granulation_slough_ratio: float | None
-    wound_bed_quality: float          # 0-100 composite index
-    volume_proxy: float | None        # area_cm2 * relative depth — PROXY
-    standard_size: str                # "L × W, area"
-    flags: tuple[Flag, ...]
+    granulation_slough_ratio: float | None  # None => slough not detected, not meaningful
+    bed_descriptor: str                     # qualitative, bilingual
+    bed_descriptor_color: str
+    under_detection: bool                   # slough/eschar likely under-detected
+    standard_size: str                      # "L × W · area"
+    necrotic_level: str                     # "none" | "caution" | "high"
+    necrotic_detail: str
+    intact_skin_pct: float                  # peri-wound / margin, whole-frame
 
 
 def _bed_fractions(analysis: WoundAnalysis) -> dict[TissueClass, float]:
@@ -89,10 +84,8 @@ def viability_split(analysis: WoundAnalysis) -> ViabilitySplit:
     epi = b.get(TissueClass.EPITHELIAL, 0.0)
     slough = b.get(TissueClass.SLOUGH, 0.0)
     eschar = b.get(TissueClass.ESCHAR, 0.0)
-    viable = gran + epi
-    non_viable = slough + eschar
     return ViabilitySplit(
-        viable_pct=round(viable * 100, 1), non_viable_pct=round(non_viable * 100, 1),
+        viable_pct=round((gran + epi) * 100, 1), non_viable_pct=round((slough + eschar) * 100, 1),
         granulation_pct=round(gran * 100, 1), epithelial_pct=round(epi * 100, 1),
         slough_pct=round(slough * 100, 1), eschar_pct=round(eschar * 100, 1),
     )
@@ -117,56 +110,60 @@ def tissue_areas_cm2(analysis: WoundAnalysis) -> tuple[TissueArea, ...]:
     return tuple(out)
 
 
-def wound_bed_quality(analysis: WoundAnalysis) -> float:
+def _under_detection(analysis: WoundAnalysis) -> bool:
     b = _bed_fractions(analysis)
-    score = sum(w * b.get(tc, 0.0) for tc, w in _WBQ_WEIGHTS.items())
-    return round(max(0.0, min(1.0, score)) * 100, 0)
+    non_viable = b.get(TissueClass.SLOUGH, 0.0) + b.get(TissueClass.ESCHAR, 0.0)
+    gran = b.get(TissueClass.GRANULATION, 0.0)
+    return non_viable < _UNDERDETECT_NONVIABLE and gran >= _UNDERDETECT_GRAN
+
+
+def _bed_descriptor(analysis: WoundAnalysis) -> tuple[str, str]:
+    b = _bed_fractions(analysis)
+    non_viable = b.get(TissueClass.SLOUGH, 0.0) + b.get(TissueClass.ESCHAR, 0.0)
+    if non_viable >= _NONVIABLE_HIGH:
+        return ("Ağırlıklı cansız doku · Predominantly non-viable", "#B4232A")
+    if non_viable >= _NONVIABLE_CAUTION:
+        return ("Karışık doku · Mixed viable / non-viable", "#D97706")
+    if _under_detection(analysis):
+        return ("Görünürde granülasyon (bkz. uyarı) · Appears granulating (see caveat)", "#65A30D")
+    return ("Ağırlıklı granülasyon/epitel · Predominantly granulating", "#16A34A")
+
+
+def _necrotic(analysis: WoundAnalysis) -> tuple[str, str]:
+    vs = viability_split(analysis)
+    nv = vs.non_viable_pct / 100.0
+    if nv >= _NONVIABLE_HIGH:
+        return ("high", f"nekroz {vs.non_viable_pct:.0f}% · eskar {vs.eschar_pct:.0f}%")
+    if nv >= _NONVIABLE_CAUTION:
+        return ("caution", f"nekroz {vs.non_viable_pct:.0f}% · slough {vs.slough_pct:.0f}%")
+    return ("none", "")
 
 
 def _ratio(analysis: WoundAnalysis) -> float | None:
     b = _bed_fractions(analysis)
     slough = b.get(TissueClass.SLOUGH, 0.0)
-    gran = b.get(TissueClass.GRANULATION, 0.0)
     if slough < 0.01:
-        return None if gran < 0.01 else 99.0  # sentinel: no slough
-    return round(gran / slough, 1)
-
-
-def _flags(analysis: WoundAnalysis, vs: ViabilitySplit) -> tuple[Flag, ...]:
-    g = analysis.metrics.geometry
-    b = _bed_fractions(analysis)
-    eschar = b.get(TissueClass.ESCHAR, 0.0)
-    non_viable = vs.non_viable_pct / 100.0
-    necrotic = eschar >= _ESCHAR_FLAG or non_viable >= _NONVIABLE_FLAG
-    elong = (g.major_axis_px / g.minor_axis_px) if g.minor_axis_px else 0.0
-    return (
-        Flag(label="Yüksek nekrotik yük · High necrotic burden", active=necrotic,
-             detail=f"nekroz {vs.non_viable_pct:.0f}% · eskar {vs.eschar_pct:.0f}%"),
-        Flag(label="Düzensiz kenar · Irregular edge", active=g.circularity < _IRREGULAR_CIRCULARITY,
-             detail=f"dairesellik {g.circularity:.2f}"),
-        Flag(label="Alttan oyulma şüphesi · Undermining suspected",
-             active=g.solidity < _UNDERMINING_SOLIDITY,
-             detail=f"doluluk {g.solidity:.2f} · 2B'den doğrulanamaz"),
-        Flag(label="Uzamış yara · Elongated", active=elong >= _ELONGATION_RATIO,
-             detail=f"en-boy {elong:.1f}"),
-    )
+        return None  # not meaningful; do not render a reassuring ">10"
+    return round(b.get(TissueClass.GRANULATION, 0.0) / slough, 1)
 
 
 def grading_stats(analysis: WoundAnalysis) -> GradingStats:
     g = analysis.metrics.geometry
-    vs = viability_split(analysis)
-    depth = analysis.metrics.depth_proxy
-    vol = None
-    if g.area_cm2 is not None and depth is not None and depth.relative_depth_index is not None:
-        vol = round(g.area_cm2 * depth.relative_depth_index, 3)
     if g.length_mm and g.width_mm and g.area_cm2 is not None:
         size = f"{g.length_mm / 10:.1f} × {g.width_mm / 10:.1f} cm · {g.area_cm2:.2f} cm²"
     else:
         size = f"{g.length_px:.0f} × {g.width_px:.0f} px"
+    desc, color = _bed_descriptor(analysis)
+    level, detail = _necrotic(analysis)
     return GradingStats(
-        viability=vs, tissue_areas=tissue_areas_cm2(analysis),
-        granulation_slough_ratio=_ratio(analysis), wound_bed_quality=wound_bed_quality(analysis),
-        volume_proxy=vol, standard_size=size, flags=_flags(analysis, vs),
+        viability=viability_split(analysis),
+        tissue_areas=tissue_areas_cm2(analysis),
+        granulation_slough_ratio=_ratio(analysis),
+        bed_descriptor=desc, bed_descriptor_color=color,
+        under_detection=_under_detection(analysis),
+        standard_size=size, necrotic_level=level, necrotic_detail=detail,
+        intact_skin_pct=round(
+            analysis.metrics.tissue.fractions.get(TissueClass.INTACT_SKIN, 0.0) * 100, 1),
     )
 
 

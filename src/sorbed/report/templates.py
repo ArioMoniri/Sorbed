@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from html import escape
 
 from sorbed.domain.analysis import WoundAnalysis
+from sorbed.domain.decision import StageDecision
 from sorbed.domain.enums import PressureInjuryStage, TissueClass
 from sorbed.guidelines.match import GuidelineContext, TopicBlock
 from sorbed.report import svg
@@ -92,15 +93,85 @@ def _brandrow(ctx: GuidelineContext, kicker: str) -> str:
     )
 
 
-def _confbox(conf: float) -> str:
-    tier, color = confidence_tier(conf)
-    pct = round(conf * 100)
+def _confbox(d: StageDecision) -> str:
+    if d.abstained:
+        return (
+            "<div class='confbox'>"
+            "<div class='confhead'><span class='muted'>Karar · Decision</span>"
+            "<span class='confpct' style='color:#DC2626'>Geri çekildi · Withheld</span></div>"
+            "<div class='confbar'><div class='conffill' style='width:100%;background:#DC2626;opacity:.25'></div></div>"
+            "<div class='small muted' style='margin-top:4px'>İnceleme gerekli · needs review</div></div>"
+        )
+    tier, color = confidence_tier(d.confidence)
+    pct = round(d.confidence * 100)
     return (
         "<div class='confbox'>"
         f"<div class='confhead'><span class='muted'>{escape(tier)}</span>"
         f"<span class='confpct' style='color:{color}'>{pct}%</span></div>"
         f"<div class='confbar'><div class='conffill' style='width:{pct}%;background:{color}'></div></div>"
-        "</div>"
+        "<div class='small muted' style='margin-top:4px'>model skoru, kalibre olasılık değil · model score</div></div>"
+    )
+
+
+_CAVEAT_COLOR = {"critical": "#DC2626", "warning": "#D97706", "info": "#4F46E5"}
+
+
+def _caveat_strip(d: StageDecision) -> str:
+    """Render the decision's caveats prominently under the grade, bilingual.
+
+    Synthesises the depth / abstention caveats too, because the engine leaves the
+    caveats list empty on some paths even when review is required.
+    """
+    items: list[tuple[str, str]] = []
+    if d.stage.is_depth_dependent:
+        items.append(("critical",
+            "Bu evre doku derinliğine bağlıdır; 2B fotoğraf derinliği doğrulayamaz — yatak başı "
+            "muayene ve klinisyen onayı gereklidir. · This grade depends on tissue depth, which a 2D "
+            "photograph cannot confirm — bedside probing and clinician confirmation are required."))
+    if d.abstained:
+        items.append(("critical", "Model kesin bir evre vermedi (Belirsiz). · The model withheld a "
+                                   "definite grade (Indeterminate)."))
+    # Render the engine's own caveats, but drop any depth caveat we already state
+    # bilingually above so it is not duplicated.
+    for c in d.caveats:
+        if d.stage.is_depth_dependent and "depth" in c.message.lower():
+            continue
+        items.append((c.severity.value, c.message))
+    if not items:
+        return ""
+    rows = "".join(
+        f"<div class='cavrow'><span class='cavdot' style='background:"
+        f"{_CAVEAT_COLOR.get(sev, '#4F46E5')}'></span><span>{escape(msg)}</span></div>"
+        for sev, msg in items
+    )
+    return f"<div class='caveats'>{rows}</div>"
+
+
+def _next_action(d: StageDecision) -> str:
+    if not d.requires_clinician_review:
+        return ""
+    return (
+        "<div class='nextact'><b>Sonraki adım · Next action:</b> Klinisyen doğrulaması gerekli — "
+        "yatak başı değerlendirme yapılmadan kesin evre kaydedilmemelidir. · Clinician confirmation "
+        "required — do not record a definitive stage without bedside assessment.</div>"
+    )
+
+
+def _disclaimer_block() -> str:
+    return (
+        "<div class='disc'><b>Karar desteği — tanı değildir · Decision support — not a diagnosis.</b> "
+        "Bu çıktı tek bir 2B fotoğraftan hesaplanan geçici bir tahmindir ve nitelikli bir klinisyen "
+        "tarafından doğrulanmalıdır. · This is a provisional estimate from a single 2D photograph and "
+        "must be confirmed by a qualified clinician.</div>"
+        "<div class='limits'><b>Fotoğraftan değerlendirilemez · Cannot be assessed from a photo:</b> "
+        "derinlik · depth &nbsp;·&nbsp; alttan oyulma / tünel · undermining / tunnelling &nbsp;·&nbsp; "
+        "enfeksiyon / inflamasyon · infection / inflammation &nbsp;·&nbsp; ağrı · pain &nbsp;·&nbsp; "
+        "perfüzyon · perfusion &nbsp;·&nbsp; osteomiyelit · osteomyelitis &nbsp;·&nbsp; yara etiyolojisi "
+        "· wound etiology.</div>"
+        "<div class='etio'><b>Ayak yaraları için · For foot wounds:</b> Bu araç yalnızca basınç "
+        "yaralanması morfolojisini derecelendirir. Ayaktaki bir yarada diyabetik/nöropatik ve arteriyel "
+        "etiyoloji ile osteomiyelit ayrıca dışlanmalıdır. · This grades pressure-injury morphology only; "
+        "on the foot, separately rule out diabetic/neuropathic and arterial etiology and osteomyelitis.</div>"
     )
 
 
@@ -209,56 +280,71 @@ def _viability_bar(s: GradingStats) -> str:
                   for p, c, lab in segs if p > 0.4)
     return (f"<div class='tissuebar'>{bar}</div>"
             f"<div class='vsplit'><span class='good'>● Canlı · Viable "
-            f"<b class='mono'>{s.viability.viable_pct:.0f}%</b></span>"
+            f"<b class='mono'>~{s.viability.viable_pct:.0f}%</b></span>"
             f"<span class='bad'>● Cansız · Non-viable "
-            f"<b class='mono'>{s.viability.non_viable_pct:.0f}%</b></span></div>")
-
-
-def _wbq_band(v: float) -> str:
-    return "#16A34A" if v >= 66 else "#D97706" if v >= 33 else "#DC2626"
+            f"<b class='mono'>~{s.viability.non_viable_pct:.0f}%</b></span></div>")
 
 
 def _clinical_stats_card(analysis: WoundAnalysis) -> str:
     s = grading_stats(analysis)
-    ratio = ("&gt;10" if s.granulation_slough_ratio and s.granulation_slough_ratio >= 99
-             else _fmt(s.granulation_slough_ratio, 1))
-    wbq_c = _wbq_band(s.wound_bed_quality)
+    ratio = ("Slough saptanmadı · not detected — oran anlamlı değil"
+             if s.granulation_slough_ratio is None else f"~{_fmt(s.granulation_slough_ratio, 1)}")
     tiles = "".join([
         f"<div class='metric'><div class='k'>Standart ölçü · Size</div>"
         f"<div class='v mono' style='font-size:12px'>{escape(s.standard_size)}</div></div>",
-        f"<div class='metric'><div class='k'>Yara yatağı kalitesi · WBQ index</div>"
-        f"<div class='v mono' style='color:{wbq_c}'>{s.wound_bed_quality:.0f}<span class='u'>/100</span></div></div>",
-        f"<div class='metric'><div class='k'>Gran./Slough oranı</div>"
-        f"<div class='v mono'>{ratio}</div></div>",
+        f"<div class='metric'><div class='k'>Yara yatağı · Wound bed</div>"
+        f"<div class='v' style='color:{s.bed_descriptor_color};font-size:11px;line-height:1.25'>"
+        f"{escape(s.bed_descriptor)}</div></div>",
+        f"<div class='metric'><div class='k'>Gran./Slough oranı · ratio</div>"
+        f"<div class='v mono' style='font-size:11px'>{ratio}</div></div>",
     ])
-    # tissue cm2 table
     rows = "".join(
         f"<div class='fi'><span>{escape(_tlabel(t.tissue))}</span>"
-        f"<span><b class='mono'>{t.fraction * 100:.0f}%</b>"
-        f"{f' · <b class=mono>{t.area_cm2:.2f} cm²</b>' if t.area_cm2 is not None else ''}</span></div>"
+        f"<span><b class='mono'>~{t.fraction * 100:.0f}%</b>"
+        f"{f' · <b class=mono>~{t.area_cm2:.2f} cm²</b>' if t.area_cm2 is not None else ''}</span></div>"
         for t in s.tissue_areas
     )
-    active = [f for f in s.flags if f.active]
-    if active:
-        flags = "".join(
-            f"<span class='pill' style='border-color:#F0B4B4;background:#FCEBEB;color:#9B2222'>"
-            f"⚑ {escape(f.label)}<span class='muted' style='font-weight:500'> · {escape(f.detail)}</span></span>"
-            for f in active
+    # Under-detection notice — the core safety fix: a slough/eschar-free bed on a
+    # deep wound is usually a classifier miss, not a clean wound.
+    under = ""
+    if s.under_detection:
+        under = (
+            "<div class='warnbox'><b>⚠ Slough/eskar saptanmadı · No slough/eschar detected.</b> "
+            "Otomatik doku ayrımı ince fibrin/slough'u granülasyondan ayıramayabilir. Bunu temiz bir "
+            "yara olarak okumayın — yatağı yatak başında doğrulayın. · Automated tissue typing may not "
+            "separate thin fibrin/slough from granulation; do not read this as a clean wound — confirm "
+            "the bed at the bedside.</div>"
         )
-    else:
-        flags = ("<span class='pill' style='border-color:#BFE6C9;background:#EBF7EE;color:#166534'>"
-                 "✓ Kritik bulgu yok · No red flags</span>")
-    vol = (f"<div class='mininote'>Hacim vekili · Volume proxy: "
-           f"<b class='mono'>{s.volume_proxy}</b> "
-           f"<span class='pill' style='padding:0 6px'>PROXY · göreli, cm³ değil</span></div>"
-           if s.volume_proxy is not None else "")
+    # Necrotic burden — graded, only when present. No reassuring "no red flags".
+    nec = ""
+    if s.necrotic_level == "high":
+        nec = ("<span class='pill' style='border-color:#F0B4B4;background:#FCEBEB;color:#9B2222'>"
+               f"⚑ Yüksek nekrotik yük · High necrotic burden · {escape(s.necrotic_detail)}</span>")
+    elif s.necrotic_level == "caution":
+        nec = ("<span class='pill' style='border-color:#F4D9A8;background:#FCF3E3;color:#8A5A12'>"
+               f"⚑ Nekrotik doku mevcut · Necrotic tissue present · {escape(s.necrotic_detail)}</span>")
+    not_ruleout = (
+        "<div class='mininote' style='margin-top:8px'>Otomatik uyarı olmaması güvenli demek değildir — "
+        "enfeksiyon, alttan oyulma, daha derin doku tutulumu veya osteomiyeliti dışlamaz. · Absence of "
+        "automated flags does not rule out infection, undermining, deeper-tissue involvement, or "
+        "osteomyelitis.</div>"
+        "<div class='mininote'>Alttan oyulma/tünel ve derinlik fotoğraftan değerlendirilemez — kenarları "
+        "yatak başında sonda ile kontrol edin. · Undermining/tunnelling and depth cannot be judged from a "
+        "photo — probe the edges at the bedside.</div>"
+    )
+    denom = ("<div class='mininote'>Yüzdeler açık yara yatağına göredir (sağlam çevre deri hariç; "
+             f"çevre/margin ~{s.intact_skin_pct:.0f}%). · Percentages are of the open wound bed "
+             "(excludes intact peri-wound skin).</div>")
     return _card(
         "Klinik istatistikler · Clinical statistics",
-        f"<div class='mininote'>Doku canlılığı · Tissue viability (yatağa göre · bed-normalised)</div>"
+        "<div class='estnote'>Model tahminleri, ölçüm değildir · Model estimates, not measurements</div>"
+        f"{under}"
+        "<div class='mininote'>Doku canlılığı · Tissue viability</div>"
         f"{_viability_bar(s)}"
         f"<div class='grid3 tight' style='margin-top:11px'>{tiles}</div>"
         f"<div class='findlist' style='margin-top:6px'>{rows}</div>"
-        f"<div style='display:flex;flex-wrap:wrap;gap:5px;margin-top:10px'>{flags}</div>{vol}",
+        + (f"<div style='margin-top:9px'>{nec}</div>" if nec else "")
+        + not_ruleout + denom,
         cls="avoidbreak",
         sub="TIME · wound-bed preparation",
     )
@@ -350,12 +436,13 @@ def build_grading_report_html(
     tone = analysis.skin_tone_band.value.replace("_", " ").title() if analysis.skin_tone_band else "—"
     calib = "kalibre · cm²" if g.area_cm2 is not None else "kalibresiz · px"
     pills = "".join([
-        _pill(f"Cilt tonu · {tone}"),
+        _pill(f"Cilt tonu · Skin tone · {tone}"),
         _pill(calib),
         _pill(f"ID {str(analysis.analysis_id)[:8]}"),
     ])
     if patient_ref:
         pills = _pill(patient_ref) + pills
+    sub_html = (f"<div class='sub'><span class='eng'>Neden · Why: </span>{sub}</div>" if sub else "")
     hero = (
         "<div class='hero'>"
         f"{_brandrow(guideline_ctx, 'pressure-injury analysis')}"
@@ -363,16 +450,15 @@ def build_grading_report_html(
         "<div class='gradeblock'>"
         "<div class='eyebrow'>Otomatik evreleme · Auto grade</div>"
         f"<div class='grade'>{escape(stage_label)}</div>"
-        f"<div class='sub'>{sub}</div>"
+        f"{sub_html}"
         f"<div class='pillrow'>{pills}</div>"
         "</div>"
-        f"{_confbox(d.confidence)}"
-        "</div></div>"
+        f"{_confbox(d)}"
+        "</div>"
+        f"{_caveat_strip(d)}{_next_action(d)}"
+        "</div>"
     )
-    disclaimer = (
-        "<div class='disc'><b>Karar desteği — tanı değildir.</b> "
-        f"{escape(analysis.disclaimer or 'Klinisyen doğrulaması gerektirir.')}</div>"
-    )
+    disclaimer = _disclaimer_block()
 
     # Left column: imagery. Photo large, model panels beneath.
     photo = (f"<figure class='big'><img src='{images['photo']}'>"
@@ -457,8 +543,11 @@ def build_grading_report_html(
             care_card = _card("Bakım ve yeniden değerlendirme · Care & reassessment",
                               "".join(bits), cls="avoidbreak")
 
-    body = (hero + disclaimer + top_card + stats_card + visuals_card + compare_card
-            + tissue_card + care_card + _footer(guideline_ctx, generated))
+    # Order (per clinical-informatics review): validated guideline grounding
+    # leads; derived indices follow under caveats; generated visuals last.
+    body = (hero + disclaimer + top_card + compare_card + stats_card
+            + tissue_card + care_card + visuals_card
+            + _footer(guideline_ctx, generated, provenance=_provenance(analysis)))
     return _doc(css, body, "Sorbed · Basınç Yaralanması Değerlendirme")
 
 
@@ -616,11 +705,26 @@ def build_followup_report_html(
     return _doc(css, body, "Sorbed · İyileşme Takibi")
 
 
-def _footer(ctx: GuidelineContext, generated: str, attribution: str = "") -> str:
+def _provenance(analysis: WoundAnalysis) -> str:
+    p = analysis.provenance
+    digest = (analysis.config_digest or "")[:12]
+    parts = [f"seg={p.segmentation_backend}", f"tissue={p.tissue_backend}",
+             f"stage={p.staging_backend}"]
+    if digest:
+        parts.append(f"config={digest}")
+    parts.append(f"schema={analysis.schema_version}")
+    return " · ".join(parts)
+
+
+def _footer(ctx: GuidelineContext, generated: str, attribution: str = "",
+            provenance: str = "") -> str:
     bits = [
-        "Sorbed karar destek yazılımıdır; tıbbi cihaz veya tanı aracı değildir. "
-        "Tüm çıktılar klinisyen doğrulaması gerektirir.",
+        "Sorbed karar destek yazılımıdır; tıbbi cihaz veya tanı aracı değildir. Tüm çıktılar "
+        "klinisyen doğrulaması gerektirir. · Sorbed is decision-support software, not a medical device "
+        "or a diagnostic tool; all outputs require clinician confirmation.",
     ]
+    if provenance:
+        bits.append(f"Model · {escape(provenance)}")
     if ctx.available and ctx.meta:
         bits.append(
             f"Klinik dayanak: {escape(ctx.meta.doc_name)} "
