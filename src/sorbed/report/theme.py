@@ -111,6 +111,7 @@ p {{ margin: 0 0 6px; }}
 .card > .cardtitle {{ display: flex; align-items: center; gap: 7px; margin-bottom: 10px; }}
 .card > .cardtitle .bar {{ width: 3px; height: 15px; border-radius: 2px; background: var(--accent); }}
 .card > .cardtitle .cardsub {{ margin-left: auto; font-size: 8.4px; color: var(--muted); font-weight: 600; }}
+.grid {{ display: grid; gap: 10px; }}
 .grid2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
 .grid3 {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }}
 .tight {{ gap: 8px; }}
@@ -147,9 +148,30 @@ figcaption {{ font-size: 8.3px; color: var(--muted); margin-top: 4px; }}
 /* ---- tissue composition bar ---- */
 .tissuebar {{ display: flex; height: 20px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); }}
 .tissuebar span {{ display: block; height: 100%; }}
+.vsplit {{ display: flex; justify-content: space-between; font-size: 9.2px; margin-top: 7px; font-weight: 600; }}
+.vsplit .good {{ color: #16A34A; }} .vsplit .bad {{ color: #B4232A; }}
 .legend {{ display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 9px; }}
 .legend .item {{ display: flex; align-items: center; gap: 6px; font-size: 8.8px; }}
 .legend .swatch {{ width: 9px; height: 9px; border-radius: 3px; }}
+
+/* ---- guideline comparison: source document vs generated ---- */
+.compare {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
+.srcbox {{ position: relative; border: 1px solid #dfd3b8; border-radius: 12px; padding: 12px 13px 13px;
+  background: repeating-linear-gradient(0deg,#fcf8ee,#fcf8ee 22px,#f7f1e2 23px); }}
+.genbox {{ position: relative; border: 1px solid var(--line); border-radius: 12px; padding: 12px 13px 13px;
+  background: var(--accent-soft); }}
+.ribbon {{ display: inline-flex; align-items: center; gap: 5px; font-size: 7.6px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; margin-bottom: 8px; }}
+.ribbon.src {{ background: #7a5c12; color: #fff; }}
+.ribbon.gen {{ background: var(--accent); color: #fff; }}
+.cmpfig img {{ width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }}
+.cmpfig figcaption {{ font-size: 8px; color: var(--muted); margin-top: 3px; }}
+.enrow {{ font-size: 8.7px; color: var(--muted); margin-top: 6px; padding-top: 6px; border-top: 1px dashed #dfd3b8; }}
+.enrow b {{ color: var(--ink); }}
+.findlist {{ font-size: 9px; margin-top: 8px; }}
+.findlist .fi {{ display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(0,0,0,.05); }}
+.findlist .fi:last-child {{ border-bottom: 0; }}
+.findlist .fi b {{ font-variant-numeric: tabular-nums; }}
 
 /* ---- directive citation ---- */
 .cite {{ border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 9px 12px; }}

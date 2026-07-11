@@ -66,19 +66,22 @@ def line_chart_svg(
     *,
     accent: str,
     unit: str = "",
-    x_label: str = "gün",
+    x_label: str = "gün · day",
     projection: tuple[float, float] | None = None,
     lower_better: bool = False,
-    width: int = 330,
-    height: int = 190,
+    width: int = 340,
+    height: int = 208,
 ) -> str:
-    pad_l, pad_r, pad_t, pad_b = 34, 14, 14, 26
+    # Generous top padding leaves a clear band for the endpoint callout so it
+    # never collides with the line or the y-axis ticks; the bottom band is sized
+    # for x tick labels plus the axis caption on separate rows.
+    pad_l, pad_r, pad_t, pad_b = 36, 46, 30, 34
     x0, y0, x1, y1 = pad_l, pad_t, width - pad_r, height - pad_b
 
     all_x = list(xs) + ([projection[0]] if projection else [])
     all_y = list(ys) + ([projection[1]] if projection else [])
     xmin, xmax = min(all_x), max(all_x)
-    ymin, ymax = 0.0, max(all_y) * 1.15 or 1.0
+    ymin, ymax = 0.0, (max(all_y) * 1.22 or 1.0)
     xspan = (xmax - xmin) or 1.0
     yspan = (ymax - ymin) or 1.0
 
@@ -89,15 +92,13 @@ def line_chart_svg(
         return y1 - (y - ymin) / yspan * (y1 - y0)
 
     parts: list[str] = []
-    # y gridlines + ticks (4 bands)
     for i in range(5):
         yy = ymin + yspan * i / 4
         gy = py(yy)
         parts.append(f"<line x1='{x0}' y1='{gy:.1f}' x2='{x1}' y2='{gy:.1f}' "
                      f"stroke='{_GRID}' stroke-width='1'/>")
-        parts.append(f"<text x='{x0 - 6}' y='{gy + 3:.1f}' text-anchor='end' "
+        parts.append(f"<text x='{x0 - 7}' y='{gy + 3:.1f}' text-anchor='end' "
                      f"font-size='8' fill='{_MUTED}'>{_fmt(yy)}</text>")
-    # baseline axis
     parts.append(f"<line x1='{x0}' y1='{y1}' x2='{x1}' y2='{y1}' stroke='{_AXIS}' stroke-width='1'/>")
 
     pts = [(px(x), py(y)) for x, y in zip(xs, ys, strict=True)]
@@ -111,25 +112,34 @@ def line_chart_svg(
     if projection:
         pxp, pyp = px(projection[0]), py(projection[1])
         parts.append(f"<line x1='{pts[-1][0]:.1f}' y1='{pts[-1][1]:.1f}' x2='{pxp:.1f}' y2='{pyp:.1f}' "
-                     f"stroke='{accent}' stroke-width='1.6' stroke-dasharray='3 3' opacity='0.6'/>")
+                     f"stroke='{accent}' stroke-width='1.6' stroke-dasharray='3 3' opacity='0.55'/>")
         parts.append(f"<circle cx='{pxp:.1f}' cy='{pyp:.1f}' r='2.6' fill='none' "
                      f"stroke='{accent}' stroke-width='1.4'/>")
 
+    # x tick labels only at first and last visit to avoid crowding.
     for i, (x, y) in enumerate(pts):
         parts.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='3.4' fill='{accent}' "
                      "stroke='white' stroke-width='1.4'/>")
-        # x tick label
-        parts.append(f"<text x='{x:.1f}' y='{y1 + 14:.1f}' text-anchor='middle' "
-                     f"font-size='8' fill='{_MUTED}'>{_fmt(list(xs)[i])}</text>")
+        if i in (0, len(pts) - 1):
+            anc = "start" if i == 0 else "end"
+            xx = x + (2 if i == 0 else -2)
+            parts.append(f"<text x='{xx:.1f}' y='{y1 + 15:.1f}' text-anchor='{anc}' "
+                         f"font-size='8' fill='{_MUTED}'>{_fmt(list(xs)[i])}</text>")
 
-    # endpoint value label
+    # Endpoint callout pinned to the top band — always clear of the plot.
     ex, ey = pts[-1]
     label = f"{_fmt(list(ys)[-1])} {unit}".strip()
-    anchor = "end" if ex > (x0 + x1) / 2 else "start"
-    dx = -6 if anchor == "end" else 6
-    parts.append(f"<text x='{ex + dx:.1f}' y='{ey - 8:.1f}' text-anchor='{anchor}' "
-                 f"font-size='9.5' font-weight='800' fill='{_INK}'>{label}</text>")
-    parts.append(f"<text x='{x1}' y='{height - 4}' text-anchor='end' font-size='7.5' "
+    cw = 8 + len(label) * 5.6
+    cx0 = min(ex - cw / 2, x1 - cw)
+    cx0 = max(cx0, x0)
+    cy0 = pad_t - 24
+    parts.append(f"<line x1='{ex:.1f}' y1='{ey:.1f}' x2='{cx0 + cw / 2:.1f}' y2='{cy0 + 17:.1f}' "
+                 f"stroke='{accent}' stroke-width='1' opacity='0.35'/>")
+    parts.append(f"<rect x='{cx0:.1f}' y='{cy0:.1f}' width='{cw:.1f}' height='17' rx='6' "
+                 f"fill='{accent}'/>")
+    parts.append(f"<text x='{cx0 + cw / 2:.1f}' y='{cy0 + 12:.1f}' text-anchor='middle' "
+                 f"font-size='9' font-weight='800' fill='#ffffff'>{label}</text>")
+    parts.append(f"<text x='{x1}' y='{height - 5}' text-anchor='end' font-size='7.5' "
                  f"fill='{_MUTED}'>{x_label} →</text>")
     return _svg(width, height, "".join(parts))
 

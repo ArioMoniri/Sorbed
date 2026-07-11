@@ -16,6 +16,7 @@ from sorbed.domain.analysis import WoundAnalysis
 from sorbed.domain.enums import PressureInjuryStage, TissueClass
 from sorbed.guidelines.match import GuidelineContext, TopicBlock
 from sorbed.report import svg
+from sorbed.report.stats import GradingStats, grading_stats, healing_velocity_band
 from sorbed.report.theme import (
     ALERT_COLORS,
     base_css,
@@ -162,6 +163,27 @@ def _card(title: str, inner: str, *, cls: str = "", sub: str = "") -> str:
     )
 
 
+# NPIAP/EPUAP 2019 English-equivalent stage definitions, shown alongside the
+# directive's verbatim Turkish so an English reader can follow. Labelled as the
+# international equivalent, not a translation of the source document.
+_STAGE_EN: dict[str, str] = {
+    "stage_1": "Stage 1 — intact skin with non-blanchable erythema; may be preceded by "
+               "colour change, warmth, oedema, or firmness. Harder to detect in dark skin.",
+    "stage_2": "Stage 2 — partial-thickness skin loss exposing dermis; a shallow open ulcer or "
+               "intact/ruptured blister. No slough, granulation, or deeper tissue.",
+    "stage_3": "Stage 3 — full-thickness skin loss; subcutaneous fat may be visible, with possible "
+               "slough, undermining, and tunnelling. Depth varies by anatomical site.",
+    "stage_4": "Stage 4 — full-thickness skin and tissue loss with exposed or palpable fascia, "
+               "muscle, tendon, or bone; often with slough/eschar, undermining, and tunnelling.",
+    "unstageable": "Unstageable — full-thickness loss where the wound bed is obscured by slough "
+                   "and/or eschar; the true depth cannot be determined until it is debrided.",
+    "deep_tissue_injury": "Deep tissue pressure injury — intact or non-intact skin with persistent "
+                          "non-blanchable deep-red, maroon, or purple discolouration.",
+}
+_RYB_EN = ("Red-Yellow-Black tissue model: red = granulation/epithelial healing tissue (desirable); "
+           "yellow = fibrinous slough, a sign of infection to treat; black = necrotic tissue to debride.")
+
+
 def _stage_likelihood(analysis: WoundAnalysis) -> str:
     probs = analysis.decision.ml_stage_probabilities or {}
     if not probs:
@@ -173,6 +195,115 @@ def _stage_likelihood(analysis: WoundAnalysis) -> str:
         color = stage_theme(st)[0]
         rows.append((_STAGE_SHORT.get(st.value, st.value), float(p), color))
     return svg.hbars_svg(rows)
+
+
+def _viability_bar(s: GradingStats) -> str:
+    segs = [
+        (s.viability.granulation_pct, "#D62839", "Granülasyon"),
+        (s.viability.epithelial_pct, "#F5B0C8", "Epitel"),
+        (s.viability.slough_pct, "#F0C846", "Slough"),
+        (s.viability.eschar_pct, "#28282D", "Eskar"),
+    ]
+    bar = "".join(f"<span style='width:{p:.1f}%;background:{c}' title='{escape(lab)}'></span>"
+                  for p, c, lab in segs if p > 0.4)
+    return (f"<div class='tissuebar'>{bar}</div>"
+            f"<div class='vsplit'><span class='good'>● Canlı · Viable "
+            f"<b class='mono'>{s.viability.viable_pct:.0f}%</b></span>"
+            f"<span class='bad'>● Cansız · Non-viable "
+            f"<b class='mono'>{s.viability.non_viable_pct:.0f}%</b></span></div>")
+
+
+def _wbq_band(v: float) -> str:
+    return "#16A34A" if v >= 66 else "#D97706" if v >= 33 else "#DC2626"
+
+
+def _clinical_stats_card(analysis: WoundAnalysis) -> str:
+    s = grading_stats(analysis)
+    ratio = ("&gt;10" if s.granulation_slough_ratio and s.granulation_slough_ratio >= 99
+             else _fmt(s.granulation_slough_ratio, 1))
+    wbq_c = _wbq_band(s.wound_bed_quality)
+    tiles = "".join([
+        f"<div class='metric'><div class='k'>Standart ölçü · Size</div>"
+        f"<div class='v mono' style='font-size:12px'>{escape(s.standard_size)}</div></div>",
+        f"<div class='metric'><div class='k'>Yara yatağı kalitesi · WBQ index</div>"
+        f"<div class='v mono' style='color:{wbq_c}'>{s.wound_bed_quality:.0f}<span class='u'>/100</span></div></div>",
+        f"<div class='metric'><div class='k'>Gran./Slough oranı</div>"
+        f"<div class='v mono'>{ratio}</div></div>",
+    ])
+    # tissue cm2 table
+    rows = "".join(
+        f"<div class='fi'><span>{escape(_tlabel(t.tissue))}</span>"
+        f"<span><b class='mono'>{t.fraction * 100:.0f}%</b>"
+        f"{f' · <b class=mono>{t.area_cm2:.2f} cm²</b>' if t.area_cm2 is not None else ''}</span></div>"
+        for t in s.tissue_areas
+    )
+    active = [f for f in s.flags if f.active]
+    if active:
+        flags = "".join(
+            f"<span class='pill' style='border-color:#F0B4B4;background:#FCEBEB;color:#9B2222'>"
+            f"⚑ {escape(f.label)}<span class='muted' style='font-weight:500'> · {escape(f.detail)}</span></span>"
+            for f in active
+        )
+    else:
+        flags = ("<span class='pill' style='border-color:#BFE6C9;background:#EBF7EE;color:#166534'>"
+                 "✓ Kritik bulgu yok · No red flags</span>")
+    vol = (f"<div class='mininote'>Hacim vekili · Volume proxy: "
+           f"<b class='mono'>{s.volume_proxy}</b> "
+           f"<span class='pill' style='padding:0 6px'>PROXY · göreli, cm³ değil</span></div>"
+           if s.volume_proxy is not None else "")
+    return _card(
+        "Klinik istatistikler · Clinical statistics",
+        f"<div class='mininote'>Doku canlılığı · Tissue viability (yatağa göre · bed-normalised)</div>"
+        f"{_viability_bar(s)}"
+        f"<div class='grid3 tight' style='margin-top:11px'>{tiles}</div>"
+        f"<div class='findlist' style='margin-top:6px'>{rows}</div>"
+        f"<div style='display:flex;flex-wrap:wrap;gap:5px;margin-top:10px'>{flags}</div>{vol}",
+        cls="avoidbreak",
+        sub="TIME · wound-bed preparation",
+    )
+
+
+def _guideline_compare_card(
+    analysis: WoundAnalysis, guideline_ctx: GuidelineContext, images: Mapping[str, str]
+) -> str:
+    if not (guideline_ctx.available and guideline_ctx.stage):
+        return ""
+    block = guideline_ctx.stage
+    fig = images.get("directive_stage")
+    en = _STAGE_EN.get(analysis.decision.stage.value, "")
+    src = (
+        "<div class='srcbox'><span class='ribbon src'>◆ Kaynak doküman · Source guideline</span>"
+        + (f"<figure class='cmpfig'><img src='{fig}'>"
+           f"<figcaption>{escape(block.caption or '')}</figcaption></figure>" if fig else "")
+        + f"<div class='q' style='font-size:9px;margin-top:8px'>{escape(block.text[:520])}</div>"
+        + _cite_line(block)
+        + (f"<div class='enrow'><b>EN (NPIAP eşdeğeri):</b> {escape(en)}</div>" if en else "")
+        + "</div>"
+    )
+    _, __, stage_label = stage_theme(analysis.decision.stage)
+    s = grading_stats(analysis)
+    findings = "".join([
+        f"<div class='fi'><span>Evre · Stage</span><b>{escape(stage_label)}</b></div>",
+        f"<div class='fi'><span>Güven · Confidence</span><b class='mono'>{round(analysis.decision.confidence*100)}%</b></div>",
+        f"<div class='fi'><span>Ölçü · Size</span><b class='mono'>{escape(s.standard_size)}</b></div>",
+        f"<div class='fi'><span>Canlı doku · Viable</span><b class='mono'>{s.viability.viable_pct:.0f}%</b></div>",
+        f"<div class='fi'><span>Baskın doku · Dominant</span><b>{escape(_tlabel(analysis.metrics.tissue.dominant))}</b></div>",
+    ])
+    schem = images.get("schematic")
+    gen = (
+        "<div class='genbox'><span class='ribbon gen'>◆ Sorbed · Üretilen · Generated</span>"
+        + (f"<figure class='cmpfig'><img src='{schem}'>"
+           "<figcaption>Model şeması · Generated schematic</figcaption></figure>" if schem else "")
+        + f"<div class='findlist' style='margin-top:8px'>{findings}</div>"
+        + "</div>"
+    )
+    return _card(
+        "Kılavuz karşılaştırması · Guideline comparison",
+        f"<p class='muted small' style='margin:-2px 0 10px'>Soldaki kaynak dokümanın şema ve tanımı, "
+        "sağdaki Sorbed'in aynı yara için ürettiği çıktı — doğrudan karşılaştırma için.</p>"
+        f"<div class='compare'>{src}{gen}</div>",
+        cls="avoidbreak",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -282,13 +413,8 @@ def build_grading_report_html(
         tissue_card = _card("Doku rengi modeli · Tissue-colour model (RYB · §4.5.9)",
                             inner, cls="avoidbreak")
 
-    stage_card = ""
-    if guideline_ctx.available and guideline_ctx.stage:
-        stage_card = _card(
-            "Evrelendirme kriteri · Staging criterion",
-            _directive_figure_block(guideline_ctx.stage, images.get("directive_stage")),
-            cls="avoidbreak",
-        )
+    stats_card = _clinical_stats_card(analysis)
+    compare_card = _guideline_compare_card(analysis, guideline_ctx, images)
 
     care_card = ""
     if guideline_ctx.available:
@@ -307,8 +433,8 @@ def build_grading_report_html(
             care_card = _card("Bakım ve yeniden değerlendirme · Care & reassessment",
                               "".join(bits), cls="avoidbreak")
 
-    body = (hero + disclaimer + top_card + tissue_card + stage_card + care_card
-            + _footer(guideline_ctx, generated))
+    body = (hero + disclaimer + top_card + stats_card + compare_card + tissue_card
+            + care_card + _footer(guideline_ctx, generated))
     return _doc(css, body, "Sorbed · Basınç Yaralanması Değerlendirme")
 
 
@@ -356,16 +482,27 @@ def build_followup_report_html(
         "</div>"
     )
 
+    vband, vcolor = healing_velocity_band(trend)
+    likely = ("Evet · Yes" if trend.likely_to_heal
+              else "Hayır · No" if trend.likely_to_heal is False else "—")
     tiles = "".join([
-        _metric("Baz→son alan", f"{trend.baseline_area:.3g}→{trend.latest_area:.3g}", trend.unit),
-        _metric("Haftalık hız", _fmt(trend.healing_rate_pct_per_week, 1), "%/hf"),
-        _metric("4-haftalık PAR", _fmt(trend.par_at_4_weeks, 0), "%"),
-        _metric("PUSH eğilimi", escape((trend.push_trend or "—").title())),
-        _metric("Kapanma (proj.)", _fmt(trend.projected_days_to_closure, 0), "gün"),
-        _metric("İyileşme olasılığı",
-                "Evet" if trend.likely_to_heal else "Hayır" if trend.likely_to_heal is False else "—"),
+        _metric("Baz→son alan · Base→latest",
+                f"{trend.baseline_area:.3g}→{trend.latest_area:.3g}", trend.unit),
+        _metric("Haftalık hız · Weekly rate", _fmt(trend.healing_rate_pct_per_week, 1), "%/hf"),
+        _metric("4-haftalık PAR · 4-wk PAR", _fmt(trend.par_at_4_weeks, 0), "%"),
+        _metric("PUSH eğilimi · trend", escape((trend.push_trend or "—").title())),
+        _metric("Kapanma · Closure (proj.)", _fmt(trend.projected_days_to_closure, 0), "gün"),
+        _metric("İyileşme olasılığı · Likely to heal", likely),
     ])
-    tiles_card = _card("Özet · Summary", f"<div class='grid3 tight'>{tiles}</div>")
+    velocity = (
+        f"<div class='metric' style='grid-column:1/-1;display:flex;align-items:center;"
+        f"justify-content:space-between'><div><div class='k'>İyileşme hızı sınıfı · "
+        f"Healing velocity</div><div class='v' style='color:{vcolor};font-size:15px'>{escape(vband)}</div></div>"
+        f"<div class='mono muted' style='font-size:11px'>{_fmt(trend.healing_rate_pct_per_week, 1)} %/hafta</div></div>"
+    )
+    tiles_card = _card("Özet · Summary",
+                       f"<div class='grid3 tight'>{tiles}</div>"
+                       f"<div class='grid tight' style='margin-top:8px'>{velocity}</div>")
 
     # SVG charts.
     days = [p.day for p in trend.points]
