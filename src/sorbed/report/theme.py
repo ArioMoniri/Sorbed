@@ -213,16 +213,10 @@ table.visits tr:last-child td {{ border-bottom: 0; }}
 /* ---- footer ---- */
 .foot {{ margin-top: 4px; font-size: 7.8px; color: var(--muted); line-height: 1.5; border-top: 1px solid var(--line); padding-top: 8px; }}
 .disc {{ background: #fff8e6; border: 1px solid #f4e3b0; border-radius: 10px; padding: 8px 11px; font-size: 8.6px; color: #7a5a12; margin-bottom: 7px; }}
-.limits {{ font-size: 8.2px; color: var(--muted); padding: 6px 11px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 7px; }}
-.limits b {{ color: var(--ink); }}
-.etio {{ font-size: 8.2px; color: #8a3a12; background: #fdefe6; border: 1px solid #f2ceb0; border-radius: 10px; padding: 7px 11px; margin-bottom: 11px; }}
-.etio b {{ color: #7a2f0c; }}
-/* hero caveats + next action — prominent, directly under the grade */
-.caveats {{ margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }}
-.cavrow {{ display: grid; grid-template-columns: 8px 1fr; gap: 8px; align-items: start; background: #fff; border: 1px solid #f1c6c6; border-radius: 9px; padding: 7px 10px; font-size: 8.7px; line-height: 1.4; color: #3a1414; }}
-.cavdot {{ width: 8px; height: 8px; border-radius: 99px; margin-top: 3px; }}
-.nextact {{ margin-top: 8px; background: var(--accent); color: #fff; border-radius: 9px; padding: 7px 11px; font-size: 8.9px; }}
-.nextact b {{ font-weight: 800; }}
+/* single actionable banner directly under the grade — only when action needed */
+.actbanner {{ margin-top: 12px; display: grid; grid-template-columns: 10px 1fr; gap: 10px; align-items: start; background: #fdecec; border: 1px solid #f0bcbc; border-radius: 11px; padding: 9px 12px; font-size: 9px; line-height: 1.45; color: #5a1a1a; }}
+.actbanner b {{ color: #9b1c1c; }}
+.actdot {{ width: 10px; height: 10px; border-radius: 99px; background: #dc2626; margin-top: 3px; }}
 .warnbox {{ background: #fef2f2; border: 1px solid #f1c6c6; border-radius: 9px; padding: 8px 10px; font-size: 8.5px; line-height: 1.42; color: #7a1f1f; margin-bottom: 9px; }}
 .warnbox b {{ color: #991b1b; }}
 .estnote {{ display: inline-block; font-size: 7.8px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 2px 9px; margin-bottom: 9px; }}
