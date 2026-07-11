@@ -28,27 +28,28 @@ from sorbed.trend.models import HealingTrend
 from sorbed.visualize.palette import TISSUE_COLORS
 
 _TISSUE_LABEL: dict[str, str] = {
-    "granulation": "Granülasyon",
-    "slough": "Fibrin/slough",
-    "eschar": "Eskar (nekroz)",
-    "epithelial": "Epitel",
-    "adipose": "Yağ dokusu",
-    "muscle": "Kas",
-    "tendon_bone": "Tendon/kemik",
-    "intact_skin": "Sağlam deri",
-    "unknown": "Belirsiz",
+    "granulation": "Granülasyon · Granulation",
+    "slough": "Fibrin/slough · Slough",
+    "eschar": "Eskar · Eschar",
+    "epithelial": "Epitel · Epithelial",
+    "adipose": "Yağ dokusu · Adipose",
+    "muscle": "Kas · Muscle",
+    "tendon_bone": "Tendon/kemik · Tendon/bone",
+    "intact_skin": "Sağlam deri · Intact skin",
+    "unknown": "Belirsiz · Unknown",
 }
 
+# Compact chip form (bilingual short) for tight cells.
 _STAGE_SHORT: dict[str, str] = {
-    "stage_1": "Evre 1",
-    "stage_2": "Evre 2",
-    "stage_3": "Evre 3",
-    "stage_4": "Evre 4",
-    "unstageable": "Sınıflandırılamayan",
-    "deep_tissue_injury": "Derin doku",
-    "mucosal_not_stageable": "Mukozal",
-    "not_pressure_injury": "Basınç yarası değil",
-    "indeterminate": "Belirsiz",
+    "stage_1": "Evre 1 · St. 1",
+    "stage_2": "Evre 2 · St. 2",
+    "stage_3": "Evre 3 · St. 3",
+    "stage_4": "Evre 4 · St. 4",
+    "unstageable": "Sınıflandırılamayan · Unstageable",
+    "deep_tissue_injury": "Derin doku · DTI",
+    "mucosal_not_stageable": "Mukozal · Mucosal",
+    "not_pressure_injury": "Basınç yarası değil · Not PI",
+    "indeterminate": "Belirsiz · Indeterminate",
 }
 
 
@@ -306,6 +307,57 @@ def _guideline_compare_card(
     )
 
 
+def _guideline_ladder_card(guideline_ctx: GuidelineContext, images: Mapping[str, str]) -> str:
+    if not (guideline_ctx.available and guideline_ctx.reference_stages):
+        return ""
+    cells = []
+    for b in guideline_ctx.reference_stages:
+        fig = images.get(b.key)
+        if not fig:
+            continue
+        stage_val = b.key.split(".")[-1]
+        short = _STAGE_SHORT.get(stage_val, stage_val)
+        cite = ", ".join(f"§{c.section}" for c in b.citations)
+        cells.append(
+            "<div class='ladcell'>"
+            f"<figure class='cmpfig'><img src='{fig}'></figure>"
+            f"<div class='ladcap'>{escape(short)}</div>"
+            f"<div class='ladtxt'>{escape(b.text[:150])}…</div>"
+            f"<div class='ladref'>{escape(cite)}</div>"
+            "</div>"
+        )
+    if not cells:
+        return ""
+    return _card(
+        "Kılavuz evreleme şeması · Guideline staging reference",
+        "<p class='muted small' style='margin:-2px 0 10px'>Kaynak dokümandaki tüm evre şema ve "
+        "tanımları — modelin verdiği evreyle görsel karşılaştırma için · The directive's full "
+        "staging scheme, for visual comparison against the graded stage.</p>"
+        f"<div class='laddergrid'>{''.join(cells)}</div>",
+        cls="avoidbreak",
+    )
+
+
+def _generated_visuals_card(images: Mapping[str, str]) -> str:
+    pairs = [("mask", "İkili maske · Binary mask"),
+             ("schematic", "Şema · Synthetic schematic"),
+             ("overlay", "Doku overlay · Tissue overlay"),
+             ("detection", "Tespit · Detection"),
+             ("depth", "Göreli derinlik · Relative depth")]
+    figs = [f"<figure><img src='{images[k]}'><figcaption>{escape(lab)}</figcaption></figure>"
+            for k, lab in pairs if k in images]
+    dash = (f"<figure style='grid-column:1/-1'><img src='{images['dashboard']}'>"
+            "<figcaption>Analiz paneli · Analysis dashboard</figcaption></figure>"
+            if "dashboard" in images else "")
+    if not figs and not dash:
+        return ""
+    return _card(
+        "Üretilen analiz görselleri · Generated analysis outputs",
+        f"<div class='gallery'>{''.join(figs)}{dash}</div>",
+        cls="avoidbreak",
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Grading report
 # --------------------------------------------------------------------------- #
@@ -415,6 +467,8 @@ def build_grading_report_html(
 
     stats_card = _clinical_stats_card(analysis)
     compare_card = _guideline_compare_card(analysis, guideline_ctx, images)
+    ladder_card = _guideline_ladder_card(guideline_ctx, images)
+    visuals_card = _generated_visuals_card(images)
 
     care_card = ""
     if guideline_ctx.available:
@@ -433,8 +487,8 @@ def build_grading_report_html(
             care_card = _card("Bakım ve yeniden değerlendirme · Care & reassessment",
                               "".join(bits), cls="avoidbreak")
 
-    body = (hero + disclaimer + top_card + stats_card + compare_card + tissue_card
-            + care_card + _footer(guideline_ctx, generated))
+    body = (hero + disclaimer + top_card + stats_card + visuals_card + compare_card
+            + ladder_card + tissue_card + care_card + _footer(guideline_ctx, generated))
     return _doc(css, body, "Sorbed · Basınç Yaralanması Değerlendirme")
 
 

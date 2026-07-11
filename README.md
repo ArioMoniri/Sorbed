@@ -109,10 +109,12 @@ The analysis is then mapped onto the directive's criteria: the staging definitio
 
 ## PDF reports & healing follow-up 📈
 
-Two print-ready, self-contained PDFs (modern layout, Manrope, grade- and confidence-based colouring), rendered by headless Chromium:
+Two print-ready, self-contained, **bilingual (Turkish · English)** PDFs (modern layout, Manrope, grade- and confidence-based colouring), rendered by headless Chromium:
 
-- **Grading report** — the grade and calibrated confidence, the uploaded photo beside the model's tissue/detection/depth panels, measurements, the tissue-composition bar, and the directive's staging criterion, tissue-colour model, and care/reassessment cadence with citations.
-- **Follow-up report** — a better/worse verdict banner with a healing gauge, vector trend charts (wound area with a projected-closure line, tissue mix over visits, PUSH total), directive-cited **clinical alerts** ("wound surface enlarging", "PUSH total falling", "devitalized tissue increasing", "stage progression"), and a per-visit timeline.
+- **Grading report** — the grade and calibrated confidence; the uploaded photo beside every generated output (binary mask, tissue overlay, detection box, relative-depth cue, synthetic schematic, and a full analysis dashboard); a **clinical-statistics** card (bed-normalised tissue viability, tissue areas in cm², a wound-bed-quality index, granulation/slough ratio, red-flag chips, standard L×W×area); a **guideline-comparison** panel putting the directive's own figure + verbatim text + an NPIAP English gloss beside Sorbed's schematic and findings; the directive's full **staging-ladder reference** (every stage's figure + text chunk); and the tissue-colour model and care/reassessment cadence — all with section/page citations.
+- **Follow-up report** — a better/worse verdict banner with a healing gauge and a healing-velocity band, vector trend charts (wound area with a projected-closure line, tissue mix over visits, PUSH total), directive-cited **clinical alerts** ("wound surface enlarging", "PUSH total falling", "devitalized tissue increasing", "stage progression"), and a per-visit timeline.
+
+Derived clinical statistics live in `sorbed.report.stats` (named constants, bed-normalised, every proxy explicitly flagged); nothing is hardcoded.
 
 Longitudinal analytics track granulation and full tissue composition, surface area (cm² when calibrated), PUSH, percent area reduction, the validated 4-week PAR predictor, and the Gilman perimeter-normalized healing rate — see [`docs/TREND.md`](docs/TREND.md).
 

@@ -101,6 +101,7 @@ class GuidelineContext(BaseModel):
     reassessment_open: str | None = None
     reassessment_citation: Citation | None = None
     definition: TopicBlock | None = None
+    reference_stages: tuple[TopicBlock, ...] = ()  # the directive's full staging ladder
 
 
 # Tissue class -> (RYB colour bucket, short interpretive note echoing §4.5.9).
@@ -162,6 +163,14 @@ def build_guideline_context(
     if reassess and sec:
         reassess_cite = Citation(section="4.5.1", page=sec.page)
 
+    # The directive's full staging ladder (every stage that ships a figure), so a
+    # report can show the whole reference scheme, not only the detected stage.
+    ladder = tuple(
+        _block(pack, key, with_figure=True)
+        for key in _STAGE_TOPIC.values()
+        if pack.figure_path(key) is not None
+    )
+
     return GuidelineContext(
         available=True,
         meta=pack.meta,
@@ -175,4 +184,5 @@ def build_guideline_context(
         care=_block(pack, care_key) if care_key else None,
         reassessment_open=reassess,
         reassessment_citation=reassess_cite,
+        reference_stages=ladder,
     )

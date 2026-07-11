@@ -173,6 +173,18 @@ figcaption {{ font-size: 8.3px; color: var(--muted); margin-top: 4px; }}
 .findlist .fi:last-child {{ border-bottom: 0; }}
 .findlist .fi b {{ font-variant-numeric: tabular-nums; }}
 
+/* ---- guideline staging ladder + generated gallery ---- */
+.laddergrid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }}
+.ladcell {{ border: 1px solid #dfd3b8; border-radius: 10px; padding: 8px; background: #fcf8ee; }}
+.ladcell img {{ width: 100%; border-radius: 7px; border: 1px solid var(--line); display: block; }}
+.ladcap {{ font-size: 9px; font-weight: 800; margin-top: 6px; color: #6c520f; }}
+.ladtxt {{ font-size: 7.6px; color: var(--muted); line-height: 1.4; margin-top: 3px; }}
+.ladref {{ font-size: 7.4px; color: #8a6a16; font-weight: 700; margin-top: 4px; }}
+.gallery {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }}
+.gallery figure {{ margin: 0; }}
+.gallery img {{ width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }}
+.gallery figcaption {{ font-size: 8px; color: var(--muted); margin-top: 3px; }}
+
 /* ---- directive citation ---- */
 .cite {{ border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 9px 12px; }}
 .cite .q {{ font-size: 9.2px; line-height: 1.5; }}
