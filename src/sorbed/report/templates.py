@@ -529,6 +529,51 @@ def build_grading_report_html(
 
 # --------------------------------------------------------------------------- #
 # Follow-up report
+def _per_visit_section(trend: HealingTrend,
+                       visit_images: Mapping[str, Mapping[str, str]]) -> str:
+    """One card per visit: the photo + tissue overlay + that visit's analysis."""
+    cards = []
+    for p in trend.points:
+        imgs = visit_images.get(p.label, {})
+        acc = stage_theme(p.stage)[0]
+        area = f"{p.area_cm2:.2f}" if p.area_cm2 is not None else f"{p.area_px:.0f}"
+        gran = p.fraction(TissueClass.GRANULATION) * 100
+        nec = (p.fraction(TissueClass.SLOUGH) + p.fraction(TissueClass.ESCHAR)) * 100
+        push = str(p.push_total) if p.push_total is not None else "—"
+        thumbs = ""
+        if imgs.get("photo"):
+            thumbs += (f"<figure><img src='{imgs['photo']}'>"
+                       "<figcaption>Fotoğraf · Photo</figcaption></figure>")
+        if imgs.get("overlay"):
+            thumbs += (f"<figure><img src='{imgs['overlay']}'>"
+                       "<figcaption>Doku · Tissue</figcaption></figure>")
+        stats = "".join([
+            f"<div class='fi'><span>Evre · Stage</span>"
+            f"<span class='chip' style='background:{acc}'>"
+            f"{escape(_STAGE_SHORT.get(p.stage.value, p.stage.value))}</span></div>",
+            f"<div class='fi'><span>Alan · Area</span><b class='mono'>~{area} {trend.unit}</b></div>",
+            f"<div class='fi'><span>Granülasyon · Granulation</span><b class='mono'>~{gran:.0f}%</b></div>",
+            f"<div class='fi'><span>Nekroz · Necrosis</span><b class='mono'>~{nec:.0f}%</b></div>",
+            f"<div class='fi'><span>PUSH</span><b class='mono'>{push}/17</b></div>",
+            f"<div class='fi'><span>Güven · Confidence</span><b class='mono'>{round(p.confidence*100)}%</b></div>",
+        ])
+        cards.append(
+            "<div class='visitcard'>"
+            f"<div class='vc-head'><b>{escape(p.label)}</b>"
+            f"<span class='muted'>gün · day {p.day:.0f}</span></div>"
+            f"<div class='vc-imgs'>{thumbs}</div>"
+            f"<div class='findlist'>{stats}</div>"
+            "</div>"
+        )
+    if not cards:
+        return ""
+    return _card(
+        "Ziyaret bazlı analiz · Per-visit analysis",
+        f"<div class='visitgrid'>{''.join(cards)}</div>",
+        cls="avoidbreak",
+    )
+
+
 # --------------------------------------------------------------------------- #
 def build_followup_report_html(
     *,
@@ -536,6 +581,7 @@ def build_followup_report_html(
     assessment: HealingAssessment,
     guideline_ctx: GuidelineContext,
     visit_thumbs: Mapping[str, str],
+    visit_images: Mapping[str, Mapping[str, str]] | None = None,
     patient_ref: str | None = None,
     generated: str = "",
     attribution: str = "",
@@ -552,8 +598,8 @@ def build_followup_report_html(
         "<div class='eyebrow'>İyileşme takibi · Healing follow-up</div>"
         f"<div class='grade' style='font-size:23px'>"
         f"{escape(patient_ref or trend.patient_ref or 'Wound trajectory')}</div>"
-        f"<div class='sub'>{len(trend.points)} ziyaret · "
-        f"{trend.points[-1].day - trend.points[0].day:.0f} gün · birim: {trend.unit}</div>"
+        f"<div class='sub'>{len(trend.points)} ziyaret · visits · "
+        f"{trend.points[-1].day - trend.points[0].day:.0f} gün · days · birim · unit: {trend.unit}</div>"
         "</div></div>"
     )
 
@@ -676,8 +722,10 @@ def build_followup_report_html(
             directive_card = _card("Talimat dayanağı · Directive basis",
                                    f"<div class='citegrid'>{''.join(blocks)}</div>", cls="avoidbreak")
 
+    per_visit = _per_visit_section(trend, visit_images or {})
     body = (hero + banner + tiles_card + charts_card + alerts_card
-            + visits_card + directive_card + _footer(guideline_ctx, generated, attribution))
+            + per_visit + visits_card + directive_card
+            + _footer(guideline_ctx, generated, attribution))
     return _doc(css, body, "Sorbed · İyileşme Takibi")
 
 

@@ -136,6 +136,17 @@ figcaption {{ font-size: 8.3px; color: var(--muted); margin-top: 4px; }}
 .chartgrid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
 .chart {{ margin: 0; border: 1px solid var(--line); border-radius: 12px; padding: 10px 11px 5px; background: #fff; }}
 .vthumb {{ width: 34px; height: 34px; border-radius: 7px; object-fit: cover; border: 1px solid var(--line); display: block; }}
+/* per-visit analysis cards */
+.visitgrid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }}
+.visitcard {{ border: 1px solid var(--line); border-radius: 12px; padding: 10px 11px; background: var(--panel); }}
+.vc-head {{ display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }}
+.vc-head b {{ font-size: 11px; }} .vc-head .muted {{ font-size: 8px; }}
+.vc-imgs {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 7px; }}
+.vc-imgs figure {{ margin: 0; }}
+.vc-imgs img {{ width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); display: block; }}
+.vc-imgs figcaption {{ font-size: 7px; color: var(--muted); margin-top: 2px; text-align: center; }}
+.visitcard .findlist {{ font-size: 8.4px; }}
+.visitcard .fi {{ padding: 2px 0; }}
 .citegrid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }}
 .cite.col {{ margin: 0; }}
 
