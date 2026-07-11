@@ -91,3 +91,4 @@ reports/
 # Local config overrides
 sorbed.local.toml
 .secrets
+var/

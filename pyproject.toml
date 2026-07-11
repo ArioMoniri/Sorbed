@@ -64,10 +64,10 @@ hf = [
     "transformers>=4.40",
     "huggingface-hub>=0.23",
 ]
-# HTML/PDF clinician reports.
-report = [
-    "jinja2>=3.1",
-    "weasyprint>=61",
+# PDF clinician reports. Templates are pure-string HTML with inlined fonts,
+# images, and SVG charts; headless Chromium (via Playwright) prints them to PDF.
+pdf = [
+    "playwright>=1.40",
 ]
 # The FastAPI service.
 api = [
@@ -84,7 +84,7 @@ dev = [
     "types-PyYAML",
 ]
 all = [
-    "sorbed[formats,ml,report,api,hf]",
+    "sorbed[formats,ml,pdf,api,hf]",
 ]
 
 [project.urls]
@@ -101,7 +101,12 @@ path = "src/sorbed/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sorbed"]
-artifacts = ["src/sorbed/visualize/fonts/*.ttf", "src/sorbed/visualize/fonts/*.txt"]
+artifacts = [
+    "src/sorbed/visualize/fonts/*.ttf",
+    "src/sorbed/visualize/fonts/*.txt",
+    "src/sorbed/report/assets/fonts/*.ttf",
+    "src/sorbed/report/assets/fonts/*.txt",
+]
 
 [tool.ruff]
 line-length = 100
@@ -117,6 +122,11 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B", "N"]
+# These modules are almost entirely CSS/HTML string literals; wrapping markup at
+# 100 columns hurts readability without benefit.
+"src/sorbed/report/theme.py" = ["E501"]
+"src/sorbed/report/templates.py" = ["E501"]
+"src/sorbed/report/svg.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -129,7 +139,7 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     "cv2.*", "skimage.*", "scipy.*", "PIL.*", "pillow_heif.*",
-    "pydicom.*", "tifffile.*", "rawpy.*", "onnxruntime.*", "weasyprint.*",
+    "pydicom.*", "tifffile.*", "rawpy.*", "onnxruntime.*", "playwright.*", "fitz.*",
     "sklearn.*", "torch.*", "transformers.*", "huggingface_hub.*",
 ]
 ignore_missing_imports = true
