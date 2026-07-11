@@ -60,6 +60,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     dataset download URLs invented, gated sets consumed from local dirs.
   - `server/` scripts + `RUNBOOK.md` — reproducible transfer→setup→train→
     monitor→export flow under tmux + venv, MIG-UUID-pinned.
+- **Feedback + continual-learning loop** (human-in-the-loop as the second
+  teacher, federated-learning-ready):
+  - `sorbed.feedback` (CPU runtime, no torch): every analysis emits an
+    `InferenceRecord` + saved mask PNG + tissue/area/PUSH stats to an append-only
+    JSONL store; clinician corrections attach as `FeedbackRecord`s. New
+    `sorbed feedback record|submit|export` CLI; the export joins the two logs
+    into a weighted training manifest (human corrections outrank rule labels).
+  - `training/continual.py` — replay-buffered continual fine-tune of the grader
+    that **refuses to promote** a new checkpoint unless it holds balanced-
+    accuracy / quadratic-weighted-κ and does not worsen calibration (ECE) on a
+    frozen hold-out, then re-exports ONNX.
+  - `training/fl_client.py` — the federated seam: `ClientUpdate` (weight deltas,
+    sample count, metrics) with FedAvg aggregation, usable locally now so a
+    future cross-hospital FedAvg/FedProx server drops in without a rewrite; no
+    data leaves the client, only deltas.
+  - `training/STRATEGY.md` documents the decision of record (SegFormer +
+    ConvNeXt-V2 deployed; MedSAM as an offline mask factory; teacher–student
+    grading; HITL continual learning; FL later).
+- **Extended dataset corpus**: `training/fetch_corpus.py` (+ `configs/datasets.yaml`)
+  aggregates the open, non-interactively fetchable wound sources — AZH·FUSeg,
+  Mendeley Lower-Limb-&-Feet (CC-BY), CO2Wounds-V2, DFUTissue, WSNet,
+  ComplexWoundDB, PIID, Roboflow/Kaggle pressure-injury staging sets — and
+  documents the gated ones; no download URLs invented.
+- **One-shot server bootstrap** `training/server/bootstrap.sh`: `curl … | bash`
+  clones the repo, builds the CUDA venv, fetches open data, and launches training
+  in tmux — pinned to a MIG UUID, fully env-configurable.
 
 <!--
 Template for future releases:

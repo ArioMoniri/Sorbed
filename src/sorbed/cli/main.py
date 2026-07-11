@@ -13,6 +13,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from sorbed.cli.feedback_cmd import feedback_app
 from sorbed.config.settings import get_settings
 from sorbed.domain.analysis import WoundAnalysis
 from sorbed.io import DecoderRegistry, load_image, sniff_format
@@ -26,6 +27,7 @@ app = typer.Typer(
     "not a diagnosis — every result must be reviewed by a clinician.",
     no_args_is_help=True,
 )
+app.add_typer(feedback_app, name="feedback")
 console = Console()
 err_console = Console(stderr=True)
 

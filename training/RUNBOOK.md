@@ -284,6 +284,61 @@ export SORBED_ONNX_MODEL=$(pwd)/artifacts/seg_unetpp/model.onnx
 
 ---
 
+## One-shot curl bootstrap (clone + setup + data + launch)
+
+Steps 1–4 above are the explicit, inspectable path. Once the branch is on
+GitHub, `training/server/bootstrap.sh` collapses them into a single command you
+paste on the server — it clones (or fast-forwards) the repo, runs
+`setup_env.sh`, fetches the open FUSeg data with `scripts/fetch_fuseg.py`, and
+launches training via `run_tmux.sh`. It is idempotent and safe to re-run.
+
+SSH in (inside tmux, so the clone/install survives a dropped connection), grab
+the MIG UUID, then curl-and-go:
+
+```bash
+ssh -p 30405 root@10.6.110.10
+tmux new -s sorbed-boot
+nvidia-smi -L                                   # copy the MIG-... UUID
+
+export MIG_UUID=MIG-xxxxxxxx-....
+curl -fsSL \
+  https://raw.githubusercontent.com/ArioMoniri/Sorbed/claude/bedsore-grading-system-wcd4ol/training/server/bootstrap.sh \
+  | bash
+```
+
+Everything is env-overridable (the script streams over a pipe, so there is no
+argv — configuration is entirely by environment variable):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MIG_UUID` | — (required) | MIG instance UUID to pin the run (skip if `SKIP_TRAIN=1`) |
+| `REPO_DIR` | `/data/briefer/sorbed` | checkout location |
+| `BRANCH` | `claude/bedsore-grading-system-wcd4ol` | branch to track |
+| `CONFIG` | `training/configs/seg_unetpp_effnet.yaml` | training YAML |
+| `CUDA_TAG` | `cu128` | torch wheel index (driver 570 / CUDA 12.8) |
+| `SKIP_SETUP=1` | off | reuse an existing venv (no install) |
+| `SKIP_DATA=1` | off | data already placed; skip the FUSeg download |
+| `SKIP_TRAIN=1` | off | stop after setup+data; do not launch training |
+
+The script prints the monitor / attach / stop commands when it finishes. To
+launch a different recipe (e.g. the SegFormer config) just override `CONFIG`:
+
+```bash
+CONFIG=training/configs/seg_segformer.yaml MIG_UUID=MIG-... \
+  curl -fsSL https://raw.githubusercontent.com/ArioMoniri/Sorbed/claude/bedsore-grading-system-wcd4ol/training/server/bootstrap.sh | bash
+```
+
+If you prefer to review the script before running it (recommended for any
+piped-to-shell command), download it first:
+
+```bash
+curl -fsSL -o bootstrap.sh \
+  https://raw.githubusercontent.com/ArioMoniri/Sorbed/claude/bedsore-grading-system-wcd4ol/training/server/bootstrap.sh
+less bootstrap.sh && MIG_UUID=MIG-... bash bootstrap.sh
+```
+
+---
+
 ## Quick reference
 
 ```bash

@@ -183,6 +183,28 @@ python scripts/train_segmenter.py --images imgs/ --masks masks/ \
 
 For a broader, cited survey of 2024–2026 model and system designs — promptable foundation models (SAM / MedSAM / MedSAM-2), state-space (Mamba) segmenters, on-device staging (YOLOv8), skin-tone equity, and the EHR/regulatory picture (FDA SaMD, EU MDR + AI Act, and EU-MDR-harmonised Turkish medical-device regulation / TİTCK) — see [`docs/MODELS.md`](docs/MODELS.md).
 
+### Model training & continual learning
+
+The learned backends are trained out-of-tree in [`training/`](training/) and never
+required by the CPU pipeline. The strategy is teacher–student: a rule-based
+[`DirectiveTeacher`](training/teacher_student.py) (NPIAP/EPUAP doctrine, abstains
+when uncertain) supplies soft stage labels that a **ConvNeXt-V2** grader distills,
+because no open graded corpus exists; a **SegFormer** segmenter
+([`train_seg.py`](training/train_seg.py)) covers wound area; and MedSAM
+([`finetune_medsam.py`](training/finetune_medsam.py)) runs as an offline *mask
+factory*, not a deployed model. Clinician QA is the second teacher — the runtime
+feedback store ([`src/sorbed/feedback/`](src/sorbed/feedback/), driven by
+`sorbed feedback record|submit|export`) harvests nurse grades and HQ corrections,
+which a replay-buffered [`continual.py`](training/continual.py) fine-tune folds in
+behind a no-regression promotion gate before re-exporting ONNX; each promoted round
+is packaged as a federated client delta ([`fl_client.py`](training/fl_client.py))
+for a future cross-hospital server.
+
+- **Strategy / decision of record:** [`training/STRATEGY.md`](training/STRATEGY.md)
+- **Server runbook (H200 MIG, one-shot curl bootstrap):** [`training/RUNBOOK.md`](training/RUNBOOK.md)
+- **Datasets & manual placement:** [`training/DATA_README.md`](training/DATA_README.md)
+- **Trainers:** `train_seg.py`, `train_grade.py`, `teacher_student.py`, `finetune_medsam.py`, `continual.py`
+
 ## API
 
 An optional FastAPI service exposes the same pipeline over HTTP (install `[api]`):
