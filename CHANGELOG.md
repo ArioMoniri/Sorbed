@@ -41,6 +41,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transformer recipe (`segformer` with a MiT encoder, e.g. `--encoder mit_b2`),
   all ONNX-exportable. Docs record the 2024–2026 landscape (nnU-Net, Mamba,
   SAM-2 / MedSAM-2 / BiomedParse) as roadmap, not shipped.
+- **`training/` GPU fine-tuning package** (kept out of the CPU-only `sorbed`
+  wheel; heavy deps lazy-imported). Sized for a single ~40 GB H200 MIG slice:
+  - `train_seg.py` (SegFormer/MiT + U-Net++/EfficientNetV2 segmenter, AMP,
+    cosine-warmup, patient-level grouped K-fold, TensorBoard, opset-17 ONNX
+    export) and `train_grade.py` (ConvNeXt-V2/ViT stage classifier, CE/focal/
+    ordinal-CORN, quadratic-weighted-κ eval).
+  - `teacher_student.py` — a deterministic, auditable **directive teacher** that
+    pseudo-labels per the HD_T86 / NPIAP schema with abstention and section
+    citations, plus KD + mean-teacher/FixMatch student distillation.
+  - `finetune_medsam.py` — prompt-free SAM/MedSAM mask-decoder fine-tune
+    (learned or heuristic auto-box) with an auto-SAM-vs-supervised eval.
+  - `evaluate.py` — publication-grade metrics (Dice/IoU/HD95/ASSD; balanced
+    accuracy, quadratic-weighted κ, per-stage sensitivity, ECE/Brier) with
+    patient-clustered bootstrap CIs, for NEJM/CLAIM/TRIPOD-AI reporting.
+  - `data_prep.py` + `datasets.py` — multi-source, leakage-free patient-level
+    manifests with honest dataset/license auditing (`DATA_README.md`); no
+    dataset download URLs invented, gated sets consumed from local dirs.
+  - `server/` scripts + `RUNBOOK.md` — reproducible transfer→setup→train→
+    monitor→export flow under tmux + venv, MIG-UUID-pinned.
 
 <!--
 Template for future releases:
