@@ -13,6 +13,7 @@ from sorbed.report import svg
 from sorbed.report.templates import (
     build_followup_report_html,
     build_grading_report_html,
+    build_summary_report_html,
 )
 from sorbed.trend import compute_trend
 from sorbed.trend.alerts import assess_healing
@@ -40,6 +41,16 @@ def test_grading_report_html_without_pack(granulating_analysis) -> None:
     assert "PID-1" in html
     # Stage label is rendered somewhere in the hero.
     assert "Stage" in html or "Evre" in html
+
+
+def test_summary_report_html(granulating_analysis) -> None:
+    ctx = build_guideline_context(granulating_analysis, None)
+    html = build_summary_report_html(
+        analysis=granulating_analysis, guideline_ctx=ctx, images={}, patient_ref="PID-2"
+    )
+    assert html.startswith("<!doctype html>")
+    assert "Analiz özeti · Analysis summary" in html
+    assert "PID-2" in html
 
 
 def test_followup_report_html_and_verdict() -> None:

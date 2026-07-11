@@ -15,6 +15,7 @@ from sorbed.report.pdf import PdfRenderError, html_to_pdf
 from sorbed.report.templates import (
     build_followup_report_html,
     build_grading_report_html,
+    build_summary_report_html,
 )
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "build_followup_report_html",
     "build_grading_report_html",
     "build_html",
+    "build_summary_report_html",
     "html_to_pdf",
     "write_report",
 ]

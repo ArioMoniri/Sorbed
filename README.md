@@ -91,7 +91,8 @@ Every artifact is a *rendering* of one canonical JSON record — nothing downstr
 | Schematic guide | `*_schematic_guide.png` | The schematic with measurements and labels. |
 | JSON | `*.json` | Canonical `WoundAnalysis` — the single source of truth. |
 | HTML | `*.html` | Self-contained clinician report. |
-| PDF (grade) | `*_grading.pdf` | Directive-grounded grading report (needs `[pdf]`). |
+| PDF (summary) | `*_summary.pdf` | Concise one-page single-image report (needs `[pdf]`). |
+| PDF (grade) | `*_grading.pdf` | Detailed directive-grounded grading report (needs `[pdf]`). |
 | PDF (follow-up) | `*_followup.pdf` | Longitudinal healing report with trend charts + alerts. |
 
 Pick a subset with `--format mask,json` or take them all with `--format all` (the default).

@@ -528,6 +528,90 @@ def build_grading_report_html(
 
 
 # --------------------------------------------------------------------------- #
+# Compact single-image "normal" report (one page)
+# --------------------------------------------------------------------------- #
+def build_summary_report_html(
+    *,
+    analysis: WoundAnalysis,
+    guideline_ctx: GuidelineContext,
+    images: Mapping[str, str],
+    patient_ref: str | None = None,
+    generated: str = "",
+) -> str:
+    """A concise one-page single-image report for everyday per-upload use."""
+    d = analysis.decision
+    g = analysis.metrics.geometry
+    hs = analysis.metrics.healing_scores
+    accent, soft, stage_label = stage_theme(d.stage)
+    css = base_css(accent, soft)
+    s = grading_stats(analysis)
+
+    tone = analysis.skin_tone_band.value.replace("_", " ").title() if analysis.skin_tone_band else "—"
+    pills = "".join([
+        _pill(patient_ref) if patient_ref else "",
+        _pill(f"Cilt tonu · Skin tone · {tone}"),
+        _pill("kalibre · cm²" if g.area_cm2 is not None else "kalibresiz · px"),
+        _pill(f"ID {str(analysis.analysis_id)[:8]}"),
+    ])
+    hero = (
+        "<div class='hero'>"
+        f"{_brandrow(guideline_ctx, 'pressure-injury analysis')}"
+        "<div class='gradewrap'><div class='gradeblock'>"
+        "<div class='eyebrow'>Otomatik evreleme · Auto grade</div>"
+        f"<div class='grade'>{escape(stage_label)}</div>"
+        f"<div class='pillrow'>{pills}</div></div>"
+        f"{_confbox(d)}</div>"
+        f"{_action_banner(d)}</div>"
+    )
+
+    # Imagery: photo + tissue overlay.
+    figs = []
+    for key, lab in (("photo", "Yüklenen görüntü · Photo"), ("overlay", "Doku · Tissue overlay")):
+        if key in images:
+            figs.append(f"<figure><img src='{images[key]}'>"
+                        f"<figcaption>{escape(lab)}</figcaption></figure>")
+    left = f"<div class='figrow'>{''.join(figs)}</div>"
+
+    area_v = f"{g.area_cm2:.2f}" if g.area_cm2 is not None else f"{g.area_px:.0f}"
+    area_u = "cm²" if g.area_cm2 is not None else "px"
+    gran = _fmt(hs.granulation_percent if hs else None, 0)
+    push = str(hs.push_partial_total) if hs and hs.push_partial_total is not None else "—"
+    metrics = "".join([
+        _metric("Yüzey alanı · Area", f"~{area_v}", area_u),
+        _metric("Ölçü · Size", escape(s.standard_size).split(" · ")[0], ""),
+        _metric("Granülasyon", f"~{gran}", "%"),
+        _metric("PUSH", push, "/17"),
+    ])
+    right = (f"<div class='grid2 tight'>{metrics}</div>"
+             "<div class='mininote' style='margin-top:10px'>Doku canlılığı · Tissue viability</div>"
+             f"{_viability_bar(s)}")
+    if s.under_detection:
+        right += ("<div class='mininote' style='margin-top:6px;color:#9b1c1c'>⚠ Slough/eskar saptanmadı — "
+                  "temiz yara olarak okumayın. · No slough/eschar detected — do not read as a clean wound.</div>")
+    summary_card = _card(
+        "Analiz özeti · Analysis summary",
+        f"<div class='splitcol'><div>{left}</div><div>{right}</div></div>",
+        cls="avoidbreak",
+    )
+
+    # Brief stage criterion (text + citation only).
+    stage_card = ""
+    if guideline_ctx.available and guideline_ctx.stage and guideline_ctx.stage.text:
+        en = _STAGE_EN.get(d.stage.value, "")
+        stage_card = _card(
+            "Evre kriteri · Stage criterion",
+            f"<div class='cite'><div class='q'>{escape(guideline_ctx.stage.text[:480])}</div>"
+            f"{_cite_line(guideline_ctx.stage)}</div>"
+            + (f"<div class='mininote' style='margin-top:6px'><b>EN (NPIAP):</b> {escape(en)}</div>" if en else ""),
+            cls="avoidbreak",
+        )
+
+    body = (hero + _disclaimer_line() + summary_card + stage_card
+            + _footer(guideline_ctx, generated, provenance=_provenance(analysis), limitations=True))
+    return _doc(css, body, "Sorbed · Tekli Görüntü Raporu")
+
+
+# --------------------------------------------------------------------------- #
 # Follow-up report
 def _per_visit_section(trend: HealingTrend,
                        visit_images: Mapping[str, Mapping[str, str]]) -> str:
