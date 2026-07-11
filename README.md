@@ -110,12 +110,13 @@ The analysis is then mapped onto the directive's criteria: the staging definitio
 
 ## PDF reports & healing follow-up 📈
 
-Two print-ready, self-contained, **bilingual (Turkish · English)** PDFs (modern layout, Manrope, grade- and confidence-based colouring), rendered by headless Chromium:
+Three print-ready, self-contained, **bilingual (Turkish · English)** PDFs (modern layout, Manrope, grade- and confidence-based colouring), rendered by headless Chromium:
 
-- **Grading report** — the grade and calibrated confidence; the uploaded photo beside every generated output (binary mask, tissue overlay, detection box, relative-depth cue, synthetic schematic, and a full analysis dashboard); a **clinical-statistics** card (bed-normalised tissue viability, tissue areas in cm², a wound-bed-quality index, granulation/slough ratio, red-flag chips, standard L×W×area); a **guideline-comparison** panel putting the directive's own figure + verbatim text + an NPIAP English gloss beside Sorbed's schematic and findings; the directive's full **staging-ladder reference** (every stage's figure + text chunk); and the tissue-colour model and care/reassessment cadence — all with section/page citations.
-- **Follow-up report** — a better/worse verdict banner with a healing gauge and a healing-velocity band, vector trend charts (wound area with a projected-closure line, tissue mix over visits, PUSH total), directive-cited **clinical alerts** ("wound surface enlarging", "PUSH total falling", "devitalized tissue increasing", "stage progression"), and a per-visit timeline.
+- **Summary report** — a concise **one-page** per-upload report: the grade and hedged confidence, an actionable "clinician confirmation required" banner, the uploaded photo beside the tissue overlay, key measurements, the viable/non-viable bar, and the directive's stage criterion (verbatim + NPIAP English gloss + citation).
+- **Grading report** — the detailed document: safety caveats rendered **directly under the grade**; a **clinical-statistics** card (bed-normalised tissue viability shown as a green-viable / red-non-viable split, tissue areas in cm², a qualitative wound-bed descriptor, standard L×W×area, and — critically — an **under-detection warning** when the classifier reports a slough-free bed on a deep wound, instead of a false "clean wound"); generated-analysis visuals (binary mask, tissue overlay, detection, relative-depth, synthetic schematic); a **guideline-comparison** panel putting the directive's own *schematic* (not a photo, to avoid confusion with the patient's image) + verbatim §-cited text + an NPIAP English gloss beside Sorbed's schematic and findings; and the tissue-colour model and care/reassessment cadence.
+- **Follow-up report** — a better/worse verdict banner with a healing gauge and a healing-velocity band, vector trend charts (wound area with a projected-closure line, tissue mix over visits, PUSH total), directive-cited **clinical alerts**, a **per-visit analysis** section (each visit's photo + overlay + stage/area/granulation/necrosis/PUSH/confidence), and a per-visit timeline.
 
-Derived clinical statistics live in `sorbed.report.stats` (named constants, bed-normalised, every proxy explicitly flagged); nothing is hardcoded.
+The reports were revised against a strict two-reviewer clinical audit (wound-care + clinical-informatics): estimates are labelled "not measurements", absence of flags never reads as "safe", undermining/depth are stated as non-assessable from a photo, and a foot-wound etiology caution is surfaced. Derived clinical statistics live in `sorbed.report.stats` (named constants, bed-normalised, every proxy explicitly flagged); nothing is hardcoded.
 
 Longitudinal analytics track granulation and full tissue composition, surface area (cm² when calibrated), PUSH, percent area reduction, the validated 4-week PAR predictor, and the Gilman perimeter-normalized healing rate — see [`docs/TREND.md`](docs/TREND.md).
 
@@ -127,7 +128,7 @@ The target workflow mirrors how wound imaging actually flows through an EHR. Tod
 2. **Human-in-the-loop:** the nurse confirms or edits; low-confidence or out-of-distribution images (bad lighting, obscured bed) **abstain** and route to review rather than forcing a stage.
 3. **Follow-up** runs automatically across a patient's visits, surfacing the healing trajectory and better/worse alerts to the QA office instead of manual chart review.
 
-Everything remains decision support — a clinician owns the final determination.
+Everything remains decision support — a clinician owns the final determination. **Privacy & governance:** wound photos are sensitive health data, so the weight-free classical core runs on-prem / at the edge with no upload, DICOM PHI is stripped, learned weights are sha256-verified, and federated learning keeps patient data on-site — consistent with **KVKK** (Türkiye) and the **GDPR**, and positioned as clinician decision support (not autonomous diagnosis) under EU-MDR-harmonised Turkish medical-device regulation (**TİTCK**).
 
 ## How the grade is decided 🧭
 
@@ -138,6 +139,8 @@ Two design choices matter most. Depth-dependent grades are damped and flagged fo
 ## Skin-tone equity ⚖️
 
 Stage 1 and Deep Tissue Injury are defined partly by color changes that are genuinely harder to see in darkly pigmented skin, and naive color analysis inherits — and can amplify — that bias. Sorbed estimates an ITA-based skin-tone band, lowers its confidence and raises an explicit warning on darker skin, and prompts assessment of temperature, firmness, and edema, which a camera cannot capture. A low or negative result on dark skin does **not** rule out injury. See [`docs/EQUITY.md`](docs/EQUITY.md).
+
+Skin tone is one of several deployment considerations, not the whole story. For a given site the material risks also include the **foot-ulcer ↔ pressure-injury domain gap** (above), **imaging variability** (ward phone photos, lighting, no scale — uncalibrated images report pixel metrics honestly and low-quality/out-of-distribution inputs route to review), and **data privacy** (above). For a predominantly Fitzpatrick II–IV population (e.g. Türkiye) the erythema-visibility gap is less extreme than in more diverse settings but is not eliminated — the ITA safeguard stays.
 
 ## Formats
 
@@ -175,6 +178,8 @@ python scripts/train_segmenter.py --images imgs/ --masks masks/ \
 python scripts/train_segmenter.py --images imgs/ --masks masks/ \
     --arch segformer --encoder mit_b2
 ```
+
+**Foot ulcers ≠ pressure injuries.** The public benchmarks above are *foot* ulcers; pressure injuries differ in anatomical site, tissue and depth, so the honest requirement is **structure design and training on an in-house pressure-injury dataset — not a foot-ulcer fine-tune**. The system is *architected* (see the diagram in the deck / [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)) to be re-tuned per site, refined by **continual learning** from clinician QA corrections, and trained across hospitals via **federated learning** so patient data never leaves the site. These are the designed/roadmap capabilities; the shipped CPU pipeline currently runs the public-data-trained segmenter.
 
 For a broader, cited survey of 2024–2026 model and system designs — promptable foundation models (SAM / MedSAM / MedSAM-2), state-space (Mamba) segmenters, on-device staging (YOLOv8), skin-tone equity, and the EHR/regulatory picture (FDA SaMD, EU MDR + AI Act, and EU-MDR-harmonised Turkish medical-device regulation / TİTCK) — see [`docs/MODELS.md`](docs/MODELS.md).
 

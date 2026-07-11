@@ -21,10 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hospital's pressure-injury guideline PDF (`scripts/build_directive_pack.py`)
   and ground every report in its numbered sections and figures
   (`sorbed.guidelines`).
-- **PDF reports** (`sorbed.report`, optional `[pdf]` extra): a directive-grounded
-  grading report and a longitudinal follow-up report with a healing verdict,
-  inline SVG trend charts, and directive-cited alerts. Modern design system with
-  the vendored Manrope (OFL) typeface and grade/confidence colouring.
+- **PDF reports** (`sorbed.report`, optional `[pdf]` extra): a concise one-page
+  summary report, a detailed directive-grounded grading report, and a
+  longitudinal follow-up report (healing verdict, inline SVG trend charts,
+  per-visit analysis, directive-cited alerts). Bilingual (Turkish · English),
+  with the vendored Manrope (OFL) typeface and grade/confidence colouring.
+  Revised against a strict two-reviewer clinical audit: safety caveats sit under
+  the grade, estimates are labelled "not measurements", a slough-free bed raises
+  an under-detection warning rather than a false "clean wound", and the guideline
+  is shown as a schematic (not a photo) for the detected grade only.
 - Healing **follow-up alerts** (`sorbed.trend.alerts`): a better/worse verdict
   plus ranked, directive-cited signals (area/PAR, PUSH, granulation, necrosis,
   stage progression).
