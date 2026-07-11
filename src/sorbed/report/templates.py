@@ -307,37 +307,6 @@ def _guideline_compare_card(
     )
 
 
-def _guideline_ladder_card(guideline_ctx: GuidelineContext, images: Mapping[str, str]) -> str:
-    if not (guideline_ctx.available and guideline_ctx.reference_stages):
-        return ""
-    cells = []
-    for b in guideline_ctx.reference_stages:
-        fig = images.get(b.key)
-        if not fig:
-            continue
-        stage_val = b.key.split(".")[-1]
-        short = _STAGE_SHORT.get(stage_val, stage_val)
-        cite = ", ".join(f"§{c.section}" for c in b.citations)
-        cells.append(
-            "<div class='ladcell'>"
-            f"<figure class='cmpfig'><img src='{fig}'></figure>"
-            f"<div class='ladcap'>{escape(short)}</div>"
-            f"<div class='ladtxt'>{escape(b.text[:150])}…</div>"
-            f"<div class='ladref'>{escape(cite)}</div>"
-            "</div>"
-        )
-    if not cells:
-        return ""
-    return _card(
-        "Kılavuz evreleme şeması · Guideline staging reference",
-        "<p class='muted small' style='margin:-2px 0 10px'>Kaynak dokümandaki tüm evre şema ve "
-        "tanımları — modelin verdiği evreyle görsel karşılaştırma için · The directive's full "
-        "staging scheme, for visual comparison against the graded stage.</p>"
-        f"<div class='laddergrid'>{''.join(cells)}</div>",
-        cls="avoidbreak",
-    )
-
-
 def _generated_visuals_card(images: Mapping[str, str]) -> str:
     pairs = [("mask", "İkili maske · Binary mask"),
              ("schematic", "Şema · Synthetic schematic"),
@@ -346,15 +315,17 @@ def _generated_visuals_card(images: Mapping[str, str]) -> str:
              ("depth", "Göreli derinlik · Relative depth")]
     figs = [f"<figure><img src='{images[k]}'><figcaption>{escape(lab)}</figcaption></figure>"
             for k, lab in pairs if k in images]
-    dash = (f"<figure style='grid-column:1/-1'><img src='{images['dashboard']}'>"
+    if not figs and "dashboard" not in images:
+        return ""
+    thumbs = f"<div class='thumbrow'>{''.join(figs)}</div>" if figs else ""
+    dash = (f"<figure class='dashfig'><img src='{images['dashboard']}'>"
             "<figcaption>Analiz paneli · Analysis dashboard</figcaption></figure>"
             if "dashboard" in images else "")
-    if not figs and not dash:
-        return ""
     return _card(
         "Üretilen analiz görselleri · Generated analysis outputs",
-        f"<div class='gallery'>{''.join(figs)}{dash}</div>",
+        thumbs + dash,
         cls="avoidbreak",
+        sub="tek fotoğraftan · from one photo",
     )
 
 
@@ -467,7 +438,6 @@ def build_grading_report_html(
 
     stats_card = _clinical_stats_card(analysis)
     compare_card = _guideline_compare_card(analysis, guideline_ctx, images)
-    ladder_card = _guideline_ladder_card(guideline_ctx, images)
     visuals_card = _generated_visuals_card(images)
 
     care_card = ""
@@ -488,7 +458,7 @@ def build_grading_report_html(
                               "".join(bits), cls="avoidbreak")
 
     body = (hero + disclaimer + top_card + stats_card + visuals_card + compare_card
-            + ladder_card + tissue_card + care_card + _footer(guideline_ctx, generated))
+            + tissue_card + care_card + _footer(guideline_ctx, generated))
     return _doc(css, body, "Sorbed · Basınç Yaralanması Değerlendirme")
 
 

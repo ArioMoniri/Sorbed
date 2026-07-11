@@ -42,16 +42,19 @@ def _t(sections: list[str], figure=None, caption: str | None = None) -> dict[str
 
 
 _TOPIC_MAP: dict[str, dict[str, Any]] = {
+    # Stage figures are the guideline's own SCHEMATIC cross-section diagrams
+    # (not its realistic clinical photos) so a report never mixes a reference
+    # illustration up with the patient's uploaded photograph.
     "definition": _t(["3.1"]),
     "stage.normal": _t(["3.2"]),
-    "stage.stage_1": _t(["3.3"], (3, 24), "Evre 1 — basmakla solmayan eritem"),
-    "stage.stage_2": _t(["3.4"], (3, 25), "Evre 2 — parsiyel kalınlıkta kayıp"),
-    "stage.stage_3": _t(["3.5"], (4, 39), "Evre 3 — tam kat, cilt altı yağ dokusu"),
-    "stage.stage_4": _t(["3.6"], (4, 34), "Evre 4 — kemik/tendon/kas görünür"),
-    "stage.unstageable": _t(["3.7"], (4, 42), "Sınıflandırılamayan — eskar/ölü doku örtülü"),
-    "stage.deep_tissue_injury": _t(["3.8"], (4, 33), "Derin doku hasarı — mor/kestane rengi"),
-    "device_related": _t(["3.9"], (5, 47), "Tıbbi cihaz ilişkili yaralanma"),
-    "support_surfaces": _t(["3.10"], (5, 45), "Destek yüzeyleri"),
+    "stage.stage_1": _t(["3.3"], (3, 30), "Evre 1 şeması · Stage 1 schematic"),
+    "stage.stage_2": _t(["3.4"], (3, 27), "Evre 2 şeması · Stage 2 schematic"),
+    "stage.stage_3": _t(["3.5"], (4, 38), "Evre 3 şeması · Stage 3 schematic"),
+    "stage.stage_4": _t(["3.6"], (4, 40), "Evre 4 şeması · Stage 4 schematic"),
+    "stage.unstageable": _t(["3.7"], (4, 42), "Sınıflandırılamayan şeması · Unstageable schematic"),
+    "stage.deep_tissue_injury": _t(["3.8"], (4, 37), "Derin doku hasarı şeması · DTI schematic"),
+    "device_related": _t(["3.9"], None, None),
+    "support_surfaces": _t(["3.10"], None, None),
     "push": _t(["3.11", "4.5.8"]),
     "exudate": _t(["3.12", "4.5.10"]),
     "debridement": _t(["3.13"]),
