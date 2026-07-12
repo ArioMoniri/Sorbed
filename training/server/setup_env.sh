@@ -77,6 +77,19 @@ source "${VENV_DIR}/bin/activate"
 echo "==> Upgrading pip tooling"
 python -m pip install --upgrade pip setuptools wheel
 
+# Preflight: prefer prebuilt wheels below (--prefer-binary) so nothing needs a C
+# compiler. If a dep still has no wheel for this platform it falls back to a
+# source build, which needs a compiler + Python headers — warn if those are
+# missing so the failure isn't cryptic (as stringzilla's "Python.h: No such
+# file" is). These are system build tools, not venv packages.
+INCLUDEPY="$(python -c 'import sysconfig; print(sysconfig.get_config_var("INCLUDEPY"))')"
+if [[ ! -f "${INCLUDEPY}/Python.h" ]] || ! command -v cc >/dev/null 2>&1; then
+    echo "WARNING: C build toolchain incomplete (need a compiler + ${INCLUDEPY}/Python.h)." >&2
+    echo "         Most installs use prebuilt wheels, but if one builds from source" >&2
+    echo "         and fails, install the headers/compiler and re-run:" >&2
+    echo "           apt-get install -y python3.11-dev build-essential" >&2
+fi
+
 # 2. Install the CUDA-matched PyTorch build. Driver 570 / CUDA 12.8 runs both the
 #    cu124 and cu128 wheels; cu124 is the safe default. Override with CUDA_TAG.
 echo "==> Installing torch + torchvision from the ${CUDA_TAG} wheel index"
@@ -84,13 +97,15 @@ python -m pip install --index-url "https://download.pytorch.org/whl/${CUDA_TAG}"
     torch torchvision
 
 # 3. Install the training requirements (segmentation stack, augmentation, ONNX).
+#    --prefer-binary makes pip pick an older wheel over a newer sdist, so a
+#    transitive dep like stringzilla installs prebuilt instead of compiling.
 echo "==> Installing training requirements"
-python -m pip install -r "${REPO_DIR}/training/requirements-train.txt"
+python -m pip install --prefer-binary -r "${REPO_DIR}/training/requirements-train.txt"
 
 # 4. Install the sorbed package itself (editable) so `from sorbed ...` resolves.
 #    The [ml] extra adds onnxruntime + scikit-learn for the CPU inference path.
 echo "==> Installing sorbed (editable, with [ml] extra)"
-python -m pip install -e "${REPO_DIR}[ml]"
+python -m pip install --prefer-binary -e "${REPO_DIR}[ml]"
 
 # 5. Sanity check: confirm torch sees the (MIG) GPU.
 echo "==> Verifying CUDA visibility"
