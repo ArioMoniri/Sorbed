@@ -102,11 +102,16 @@ gated.
   ship with them. Use as an unlabeled/pseudo-labeled pool or after deriving masks.
   Set `require_masks: false` if importing image-only.
 
-### PIID (open, no stated license) — NPIAP Stage 1–4 classification
+### PIID (open, no stated license) — Stage 1–4 classification
 
 - Access: `github.com/FU-MedicalAI/PIID`. Whole-image stage labels, **no masks**,
   no DTI/unstageable, small (~1,091). Import with `require_masks: false` and fill
   `stage_label` from the class folder names. No explicit license — research risk.
+- **Guideline caveat:** most sources describe PIID's stages as **EPUAP I–IV**, not
+  NPIAP — confirm against the dataset card before relying on it for the teacher.
+  In practice Stages 1–4 share the NPIAP/EPUAP 2019 joint definitions, so the
+  numeric labels line up; only the provenance note differs. DTI/Unstageable are
+  absent, so PIID cannot supply those two classes.
 
 ### Kaggle mixed sets (open, inherit source licenses)
 

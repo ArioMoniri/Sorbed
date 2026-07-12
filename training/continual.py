@@ -388,14 +388,14 @@ def fine_tune_grader(
     import torch
     from torch.utils.data import DataLoader
 
-    from training import utils
+    from training import memory, utils
 
     weights = [effective_weight(r, cfg) for r in rows]
     loader = DataLoader(
         _WeightedGradeDataset(rows, weights, int(cfg["input_size"]), augment=True),
         batch_size=int(cfg["batch_size"]),
         shuffle=True,
-        num_workers=int(cfg.get("num_workers", 0)),
+        num_workers=memory.safe_num_workers(int(cfg.get("num_workers", 0))),
         drop_last=False,
         pin_memory=device.type == "cuda",
     )
@@ -418,14 +418,30 @@ def fine_tune_grader(
             images = images.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
             sample_w = sample_w.to(device, non_blocking=True).float()
-            optimizer.zero_grad(set_to_none=True)
-            with utils.autocast_context(device, enabled=bool(cfg.get("amp", True))):
-                logits = model(images)
-                per_sample = torch.nn.functional.cross_entropy(logits, targets, reduction="none")
-                loss = (per_sample * sample_w).sum() / sample_w.sum().clamp_min(1e-8)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            # OOM-safe: empty the cache and retry the step once (the weighted-mean
+            # loss must be computed over the whole batch, so we retry rather than
+            # micro-batch); a persistent OOM raises a clear, actionable error.
+            for attempt in range(2):
+                try:
+                    optimizer.zero_grad(set_to_none=True)
+                    with utils.autocast_context(device, enabled=bool(cfg.get("amp", True))):
+                        logits = model(images)
+                        per_sample = torch.nn.functional.cross_entropy(
+                            logits, targets, reduction="none")
+                        loss = (per_sample * sample_w).sum() / sample_w.sum().clamp_min(1e-8)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    break
+                except RuntimeError as exc:
+                    if not memory.is_oom_error(exc) or attempt == 1:
+                        if memory.is_oom_error(exc):
+                            raise MemoryError(
+                                "CUDA OOM during continual fine-tune; lower batch_size/"
+                                "input_size in the config or set vram_fraction."
+                            ) from exc
+                        raise
+                    memory.empty_cache()
             scheduler.step()
             ema.update(model)
             meter.update(float(loss.item()), images.size(0))
@@ -446,11 +462,13 @@ def _infer_grader(
     import torch
     from torch.utils.data import DataLoader
 
+    from training import memory
+
     loader = DataLoader(
         _WeightedGradeDataset(rows, [1.0] * len(rows), int(cfg["input_size"]), augment=False),
         batch_size=int(cfg["batch_size"]),
         shuffle=False,
-        num_workers=int(cfg.get("num_workers", 0)),
+        num_workers=memory.safe_num_workers(int(cfg.get("num_workers", 0))),
     )
     model.eval()
     trues: list[int] = []
@@ -459,7 +477,7 @@ def _infer_grader(
     with torch.no_grad():
         for images, targets, _weight in loader:
             images = images.to(device, non_blocking=True)
-            probs = torch.softmax(model(images), dim=1)
+            probs = torch.softmax(memory.safe_infer(model, images), dim=1)
             conf, pred = probs.max(dim=1)
             trues.extend(int(t) for t in targets.tolist())
             preds.extend(int(p) for p in pred.cpu().tolist())
@@ -622,10 +640,11 @@ def run_round(cfg: dict[str, Any]) -> dict[str, Any]:
     """
     import torch
 
-    from training import utils
+    from training import memory, utils
 
     utils.set_seed(int(cfg.get("seed", 1234)))
     device = utils.resolve_device(str(cfg.get("device", "auto")))
+    memory.configure(device, vram_fraction=cfg.get("vram_fraction"))
     rng = np.random.default_rng(int(cfg.get("seed", 1234)))
     out_dir = Path(cfg["out_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)

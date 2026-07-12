@@ -86,6 +86,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **One-shot server bootstrap** `training/server/bootstrap.sh`: `curl … | bash`
   clones the repo, builds the CUDA venv, fetches open data, and launches training
   in tmux — pinned to a MIG UUID, fully env-configurable.
+- **Out-of-memory safety** (`training/memory.py`): the trainers no longer crash on
+  a shared MIG slice. On a CUDA OOM the step empties the cache and **retries the
+  batch split into more micro-batches** (gradient accumulation — effective batch
+  unchanged), remembering the working split; validation forward passes shrink the
+  same way. `--vram-fraction` caps the process to a share of the slice (catchable
+  early OOM), `run_tmux.sh` exports `PYTORCH_CUDA_ALLOC_CONF=expandable_segments`,
+  and `--num-workers` is auto-capped by available RAM/CPU. Wired into `train_seg`,
+  `train_grade`, and `continual`; covered by `tests/test_training_memory.py`.
+- **No-API model weights** (`training/fetch_models.py`): downloads SAM / MedSAM /
+  SAM-2 weights with **no HuggingFace token and no API key** (public URLs). The
+  transformers-format `medsam-vit-base` (public `flaviagiammarino` mirror) loads
+  directly into `finetune_medsam.py` via `--weights-dir`; original Meta SAM /
+  SAM-2.1 CDN checkpoints are also offered. `SAM 3` (gated) is intentionally
+  excluded. Corrected the PIID note (stages are EPUAP I–IV, not NPIAP).
 
 <!--
 Template for future releases:

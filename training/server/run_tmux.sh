@@ -82,6 +82,7 @@ cd '${REPO_DIR}' \
   && source '${VENV_DIR}/bin/activate' \
   && export CUDA_VISIBLE_DEVICES='${MIG_UUID}' \
   && export PYTHONUNBUFFERED=1 \
+  && export PYTORCH_CUDA_ALLOC_CONF="\${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}" \
   && echo "[run_tmux] session=${SESSION} mig=${MIG_UUID} log=${LOG_FILE}" \
   && stdbuf -oL -eL python -m training.train_seg \
        --config '${CONFIG}' \

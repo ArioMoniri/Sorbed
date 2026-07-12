@@ -27,7 +27,10 @@ val_fraction: 0.2
 folds: 5
 fold: 0
 
-num_workers: 8
+num_workers: 8          # auto-capped by available RAM (training/memory.py)
+# vram_fraction: 0.92   # optional: cap the process to this share of the MIG slice
+#                         so it hits a catchable OOM (auto micro-batch shrink)
+#                         instead of a hard crash. Leave unset for no cap.
 amp: true
 grad_checkpointing: true
 seed: 1234

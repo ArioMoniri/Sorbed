@@ -36,15 +36,20 @@ SAM-2 / MedSAM-2 (``wanglab/MedSAM2``) use a *different* code path (the
 the pragmatic, ONNX-friendlier choice. See ``training/EVALUATE.md`` for the SAM-2
 note.
 
-Offline fallback
-----------------
-No download is attempted when you point at a local snapshot::
+No-API download / offline fallback
+----------------------------------
+``training/fetch_models.py`` fetches transformers-format SAM/MedSAM weights with
+**no HuggingFace token and no API key** (public ``resolve/main`` URLs), so a plain
+server can grab a real MedSAM checkpoint and run fully offline::
 
-    huggingface-cli download facebook/sam-vit-base --local-dir /data/briefer/sam-vit-base
-    python training/finetune_medsam.py train --weights-dir /data/briefer/sam-vit-base ...
+    python -m training.fetch_models medsam-vit-base --out /data/briefer/models
+    python -m training.finetune_medsam train \\
+        --weights-dir /data/briefer/models/medsam-vit-base ...
 
 ``--weights-dir`` (or ``HF_HUB_OFFLINE=1``) forces ``local_files_only`` so the run
 never touches the network — the required posture on an air-gapped clinical box.
+``fetch_models.py medsam-vit-base`` uses the public ``flaviagiammarino/medsam-vit-base``
+mirror; ``huggingface-cli download`` on any public repo also works without a token.
 
 Data
 ----

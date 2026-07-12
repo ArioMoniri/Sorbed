@@ -37,7 +37,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from training import data as data_mod
-from training import utils
+from training import memory, utils
 from training.losses import DiceBCELoss, MulticlassDiceCELoss
 from training.models import build_segmenter, export_onnx
 
@@ -67,6 +67,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--folds", type=int, default=None, help="K for grouped K-fold")
     parser.add_argument("--fold", type=int, default=None, help="fold index to train")
     parser.add_argument("--num-workers", type=int, default=None)
+    parser.add_argument("--vram-fraction", type=float, default=None,
+                        help="cap the process to this fraction (0-1] of MIG VRAM")
     parser.add_argument("--amp", dest="amp", action="store_true", default=None)
     parser.add_argument("--no-amp", dest="amp", action="store_false")
     parser.add_argument("--grad-checkpointing", dest="grad_checkpointing",
@@ -93,6 +95,7 @@ _DEFAULTS: dict[str, Any] = {
     "folds": 5,
     "fold": 0,
     "num_workers": 4,
+    "vram_fraction": None,
     "amp": True,
     "grad_checkpointing": False,
     "seed": 1234,
@@ -159,7 +162,7 @@ def evaluate(model: torch.nn.Module, loader: DataLoader, device: torch.device,
     for images, targets in loader:
         images = images.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
-        logits = model(images)
+        logits = memory.safe_infer(model, images)
         if num_classes == 1:
             preds = (torch.sigmoid(logits) >= 0.5).float()
             inter = (preds * targets).sum(dim=(1, 2, 3))
@@ -184,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = build_config(args)
     utils.set_seed(int(cfg["seed"]))
     device = utils.resolve_device(str(cfg["device"]))
+    memory.configure(device, vram_fraction=cfg.get("vram_fraction"))
+    num_workers = memory.safe_num_workers(int(cfg["num_workers"]))
     num_classes = int(cfg["num_classes"])
     size = int(cfg["input_size"])
 
@@ -196,13 +201,13 @@ def main(argv: list[str] | None = None) -> int:
         data_mod.SegmentationDataset(train_pairs, input_size=size,
                                      num_classes=num_classes, augment=True),
         batch_size=int(cfg["batch_size"]), shuffle=True,
-        num_workers=int(cfg["num_workers"]), drop_last=True, pin_memory=device.type == "cuda",
+        num_workers=num_workers, drop_last=True, pin_memory=device.type == "cuda",
     )
     val_loader = DataLoader(
         data_mod.SegmentationDataset(val_pairs, input_size=size,
                                      num_classes=num_classes, augment=False),
         batch_size=int(cfg["batch_size"]), shuffle=False,
-        num_workers=int(cfg["num_workers"]), pin_memory=device.type == "cuda",
+        num_workers=num_workers, pin_memory=device.type == "cuda",
     )
 
     encoder_weights = None if str(cfg["encoder_weights"]).lower() == "none" \
@@ -229,6 +234,14 @@ def main(argv: list[str] | None = None) -> int:
         warmup_steps=steps_per_epoch * int(cfg["warmup_epochs"]),
     )
     scaler = utils.make_grad_scaler(device, enabled=bool(cfg["amp"]))
+    amp_on = bool(cfg["amp"])
+    trainer_step = memory.AdaptiveTrainStep(
+        optimizer, scaler, max_microbatches=int(cfg["batch_size"]))
+
+    def forward_fn(img: torch.Tensor, tgt: torch.Tensor) -> torch.Tensor:
+        with utils.autocast_context(device, enabled=amp_on):
+            return criterion(model(img), tgt)
+
     ckpt = utils.CheckpointManager(cfg["out_dir"], mode="max")
     writer = utils.make_summary_writer(cfg["out_dir"] / "tb")
 
@@ -239,16 +252,12 @@ def main(argv: list[str] | None = None) -> int:
         for images, targets in train_loader:
             images = images.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
-            optimizer.zero_grad(set_to_none=True)
-            with utils.autocast_context(device, enabled=bool(cfg["amp"])):
-                logits = model(images)
-                loss = criterion(logits, targets)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            # On CUDA OOM this shrinks the micro-batch and retries (grad
+            # accumulation), so a memory spike degrades throughput, not crashes.
+            batch_loss = trainer_step.run((images, targets), forward_fn)
             scheduler.step()
-            loss_meter.update(float(loss.item()), images.size(0))
-            writer.add_scalar("train/loss", float(loss.item()), global_step)
+            loss_meter.update(batch_loss, images.size(0))
+            writer.add_scalar("train/loss", batch_loss, global_step)
             writer.add_scalar("train/lr", scheduler.get_last_lr()[0], global_step)
             global_step += 1
 

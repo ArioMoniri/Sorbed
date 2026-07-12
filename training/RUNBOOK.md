@@ -339,6 +339,47 @@ less bootstrap.sh && MIG_UUID=MIG-... bash bootstrap.sh
 
 ---
 
+## Out-of-memory safety (no crashes on the shared slice)
+
+The trainers guard both RAM and VRAM (`training/memory.py`), so a memory spike
+degrades throughput instead of killing the run:
+
+- **VRAM OOM → automatic recovery.** On a CUDA out-of-memory error the training
+  step empties the cache and **retries the batch split into more micro-batches**
+  (gradient accumulation — the effective batch is unchanged). The working split
+  is remembered, so later steps skip straight to it. You'll see
+  `[mem] CUDA OOM — retrying batch in N micro-batches` in the log; validation
+  forward passes shrink the same way.
+- **Proactive cap.** Set `--vram-fraction 0.92` (or the `vram_fraction:` config
+  key) to cap the process to a share of the slice so it OOMs *catchably* early
+  rather than starving the device. `run_tmux.sh` also exports
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to cut fragmentation OOMs.
+- **RAM.** `--num-workers` is auto-capped by available system RAM and CPU count,
+  so a large value can't OOM the host. Lower `--input-size` (768 → 512) or
+  `--batch-size` if a run still can't fit.
+
+If OOM persists even at micro-batch = 1, the run stops with a clear message to
+lower `--input-size`/`--batch-size` — never a bare CUDA crash.
+
+## MedSAM / SAM weights without an API key (mask-factory path)
+
+The optional MedSAM mask-factory needs SAM-family weights. Fetch them with **no
+HuggingFace token and no API key** (public URLs), then fine-tune offline:
+
+```bash
+source /data/briefer/sorbed-venv/bin/activate
+python -m training.fetch_models --list                         # see all no-auth sources
+python -m training.fetch_models medsam-vit-base --out /data/briefer/models
+python -m training.finetune_medsam train \
+    --weights-dir /data/briefer/models/medsam-vit-base \
+    --manifest /data/briefer/manifests/combined/train.csv \
+    --out-dir artifacts/medsam
+```
+
+`fetch_models` also serves `sam-vit-base/large/huge` (transformers format) and the
+original Meta SAM / SAM-2.1 CDN checkpoints. `SAM 3` is gated (needs a token) and
+is intentionally not offered.
+
 ## Quick reference
 
 ```bash
