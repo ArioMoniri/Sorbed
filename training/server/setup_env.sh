@@ -41,6 +41,22 @@ echo "    venv:      ${VENV_DIR}"
 echo "    python:    ${PYTHON} ($(${PYTHON} --version 2>&1))"
 echo "    torch tag: ${CUDA_TAG}"
 
+# Sorbed requires Python >= 3.11 (uses datetime.UTC and enum.StrEnum). Fail here
+# with actionable steps rather than deep inside the editable install.
+PYVER="$(${PYTHON} -c 'import sys; print("%d %d" % sys.version_info[:2])')"
+read -r PYMAJ PYMIN <<<"${PYVER}"
+if (( PYMAJ < 3 || (PYMAJ == 3 && PYMIN < 11) )); then
+    echo "ERROR: Sorbed needs Python >= 3.11, but ${PYTHON} is 3.${PYMIN}." >&2
+    echo "       Install 3.11 (Ubuntu 22.04 ships 3.10), then delete this venv and re-run:" >&2
+    echo "         apt-get update && apt-get install -y software-properties-common" >&2
+    echo "         add-apt-repository -y ppa:deadsnakes/ppa && apt-get update" >&2
+    echo "         apt-get install -y python3.11 python3.11-venv" >&2
+    echo "         rm -rf ${VENV_DIR}" >&2
+    echo "       Or point PYTHON at an existing >=3.11 interpreter:" >&2
+    echo "         PYTHON=/usr/bin/python3.12 bash training/server/setup_env.sh" >&2
+    exit 1
+fi
+
 if [[ ! -f "${REPO_DIR}/pyproject.toml" ]]; then
     echo "ERROR: ${REPO_DIR} does not look like the Sorbed repo (no pyproject.toml)." >&2
     echo "       Set REPO_DIR to the checkout you transferred with transfer.sh." >&2
