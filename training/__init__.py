@@ -46,6 +46,10 @@ Modules
     Publication-grade metrics: segmentation (Dice/IoU/HD95/ASSD) and grading
     (balanced accuracy, quadratic-weighted κ, per-stage sensitivity, ECE/Brier)
     with patient-clustered bootstrap CIs.
+``training.benchmark``
+    Compares the learned grader against the directive rule-engine baseline on a
+    validation fold and renders a montage of graded images with their wound-mask
+    overlays.
 
 None of these modules is imported by the ``sorbed`` runtime; the CPU inference
 path never depends on torch.
