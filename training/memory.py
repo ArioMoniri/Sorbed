@@ -170,17 +170,35 @@ def log_memory(device: Any, *, tag: str = "") -> None:
 
 
 def safe_num_workers(
-    requested: int, *, per_worker_gb: float = 1.5, reserve_gb: float = 2.0
+    requested: int,
+    *,
+    per_worker_gb: float = 1.5,
+    reserve_gb: float = 2.0,
+    min_shm_mb: int = 512,
 ) -> int:
-    """Cap DataLoader workers by available RAM and CPU count.
+    """Cap DataLoader workers by available RAM, CPU count, and ``/dev/shm``.
 
     Each worker holds a copy of the dataset's Python state and prefetch buffers;
     on a busy shared box, honouring a large ``--num-workers`` can OOM the host.
     We budget ``per_worker_gb`` per worker out of (available RAM − ``reserve_gb``)
     and never exceed the CPU count. Returns at least 0 (0 = load in the main
     process, always safe).
+
+    Crucially, worker processes pass batches through ``/dev/shm``; containers cap
+    it at ~64 MB, which makes *any* ``num_workers > 0`` crash with "unable to
+    allocate shared memory" regardless of the tensor-sharing strategy. When
+    ``/dev/shm`` is that small we force 0 workers — the only reliable fix short of
+    resizing the container's shared memory.
     """
     requested = max(0, int(requested))
+    shm = shm_free_bytes()
+    if requested > 0 and shm is not None and shm < min_shm_mb * 1024 * 1024:
+        print(
+            f"[mem] /dev/shm is only {shm / 1e6:.0f} MB — forcing --num-workers 0 "
+            "(DataLoader workers can't share memory here; increase the container's "
+            "--shm-size to re-enable them)"
+        )
+        return 0
     cpu = os.cpu_count() or 1
     cap = min(requested, cpu)
     ram = _available_ram_gb()
