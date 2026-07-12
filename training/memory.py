@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import gc
 import os
+import shutil
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -43,6 +44,7 @@ def configure(device: Any, *, vram_fraction: float | None = None, verbose: bool 
     :class:`AdaptiveTrainStep`) well before starving the device.
     """
     os.environ.setdefault(_ALLOC_CONF_KEY, "expandable_segments:True")
+    tune_dataloader_sharing(verbose=verbose)
     if getattr(device, "type", None) != "cuda":
         return
     import torch
@@ -55,6 +57,39 @@ def configure(device: Any, *, vram_fraction: float | None = None, verbose: bool 
         torch.cuda.set_per_process_memory_fraction(frac, index)
     if verbose:
         log_memory(device, tag="configure")
+
+
+def shm_free_bytes() -> int | None:
+    """Free bytes on ``/dev/shm``; ``None`` if it can't be read."""
+    try:
+        return shutil.disk_usage("/dev/shm").free
+    except OSError:
+        return None
+
+
+def tune_dataloader_sharing(*, min_shm_mb: int = 512, verbose: bool = True) -> None:
+    """Avoid the container ``/dev/shm`` DataLoader crash.
+
+    Containers (Docker, k8s) often cap ``/dev/shm`` at 64 MB. PyTorch's default
+    ``file_descriptor`` tensor-sharing passes worker batches through ``/dev/shm``,
+    so ``num_workers > 0`` dies with ``unable to allocate shared memory``. When
+    ``/dev/shm`` is small we switch to ``file_system`` sharing, which uses regular
+    temp files instead — workers keep running, no crash. No-op if torch is absent.
+    """
+    free = shm_free_bytes()
+    if free is None or free >= min_shm_mb * 1024 * 1024:
+        return
+    try:
+        import torch.multiprocessing as mp
+
+        mp.set_sharing_strategy("file_system")
+    except Exception:  # torch absent or strategy unavailable
+        return
+    if verbose:
+        print(
+            f"[mem] /dev/shm is small ({free / 1e6:.0f} MB) — using file_system tensor "
+            "sharing so DataLoader workers don't crash on shared memory"
+        )
 
 
 def is_oom_error(exc: BaseException) -> bool:
