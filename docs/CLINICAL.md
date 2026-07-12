@@ -1,12 +1,12 @@
 # Clinical Basis & Grading Logic
 
-This document explains the clinical reasoning that Sorbed encodes. It is written for two audiences at once: clinicians who need to trust that the system respects established staging doctrine, and developers who need an unambiguous specification of the rules the software must implement. Wherever the two audiences might diverge, the clinical meaning takes precedence — the code exists to serve the guideline, not the other way around.
+This document describes the clinical reasoning that Sorbed encodes. It serves two audiences: clinicians assessing whether the system respects established staging doctrine, and developers who need an unambiguous specification of the rules the software implements. Where the two might diverge, the clinical meaning takes precedence; the code implements the guideline.
 
-Sorbed is a decision-support tool. It does not diagnose, and it is explicitly designed to defer to a clinician on the cases that surface RGB photography cannot resolve. The sections below describe how the system stages a pressure injury, what tissue it recognizes, what it measures, how those measurements feed the standard monitoring scales, and — most importantly — the deterministic rule layer that turns machine perception into a defensible grade.
+Sorbed is a decision-support tool. It does not diagnose and is designed to defer to a clinician on cases that RGB photography cannot resolve. The sections below describe how the system stages a pressure injury, what tissue it recognizes, what it measures, how those measurements feed the standard monitoring scales, and the deterministic rule layer that turns machine perception into a grade.
 
 ## Staging systems and terminology
 
-Sorbed follows the National Pressure Injury Advisory Panel (NPIAP) 2016 staging system as carried forward in the 2019 EPUAP–NPIAP–PPPIA International Guideline. Two vocabularies coexist in the literature, and the software is deliberately bilingual about them:
+Sorbed follows the National Pressure Injury Advisory Panel (NPIAP) 2016 staging system as carried forward in the 2019 EPUAP–NPIAP–PPPIA International Guideline. Two vocabularies coexist in the literature, and the software supports both:
 
 - **NPIAP** uses the term *pressure injury* with Arabic numerals (Stage 1 through Stage 4).
 - **EPUAP** uses the term *pressure ulcer* with the word *Category* (Category I through IV).
@@ -15,38 +15,38 @@ The naming differs; the underlying tissue criteria are identical. A Stage 3 pres
 
 ### Stage 1 — Non-blanchable erythema of intact skin
 
-Intact skin with localized, **non-blanchable** erythema. In darkly pigmented skin the presentation may not read as redness at all; it appears instead as a deviation in color from the surrounding tissue — hyperpigmentation, or a purplish-to-bluish hue that is easy to miss. Critically, deep red, maroon, or purple discoloration is *not* Stage 1; that presentation indicates deep tissue injury. Stage 1 may be accompanied by changes in temperature, firmness, or edema before any color change is visible.
+Intact skin with localized, **non-blanchable** erythema. In darkly pigmented skin the presentation may not read as redness; it appears instead as a deviation in color from the surrounding tissue — hyperpigmentation, or a purplish-to-bluish hue. Deep red, maroon, or purple discoloration is *not* Stage 1; that presentation indicates deep tissue injury. Stage 1 may be accompanied by changes in temperature, firmness, or edema before any color change is visible.
 
-What the system can observe: an intact epidermis, a localized color change, and the absence of slough, eschar, granulation, or any exposed subcutaneous tissue.
+Observable characteristics: an intact epidermis, a localized color change, and the absence of slough, eschar, granulation, or any exposed subcutaneous tissue.
 
 ### Stage 2 — Partial-thickness skin loss with exposed dermis
 
-Partial-thickness loss of skin exposing the dermis. The wound bed is viable, pink or red, and **moist**. This stage also covers an intact or ruptured **serum-filled** blister. No adipose (fat) is visible, and there is no granulation tissue, slough, or eschar. Stage 2 should not be used to describe moisture-associated skin damage (MASD/IAD), skin tears, or burns, all of which have distinct etiologies even when they look superficially similar.
+Partial-thickness loss of skin exposing the dermis. The wound bed is viable, pink or red, and **moist**. This stage also covers an intact or ruptured **serum-filled** blister. No adipose (fat) is visible, and there is no granulation tissue, slough, or eschar. Stage 2 does not describe moisture-associated skin damage (MASD/IAD), skin tears, or burns, all of which have distinct etiologies even when they look superficially similar.
 
 ### Stage 3 — Full-thickness skin loss
 
-Full-thickness loss in which **adipose (fat) is visible** in the wound bed. Granulation tissue and epibole (rolled wound edges) are often present, and slough or eschar may partially obscure the bed. What is *not* present is any deeper structure: no fascia, muscle, tendon, ligament, cartilage, or bone. The visibility of fat is the defining threshold that separates Stage 3 from Stage 2.
+Full-thickness loss in which **adipose (fat) is visible** in the wound bed. Granulation tissue and epibole (rolled wound edges) are often present, and slough or eschar may partially obscure the bed. No deeper structure is present: no fascia, muscle, tendon, ligament, cartilage, or bone. The visibility of fat is the defining threshold that separates Stage 3 from Stage 2.
 
 ### Stage 4 — Full-thickness skin and tissue loss
 
-Full-thickness loss with **exposed or directly palpable fascia, muscle, tendon, ligament, cartilage, or bone.** Epibole, undermining, and tunneling are common. The presence of any of these structural tissues is what distinguishes Stage 4 from Stage 3.
+Full-thickness loss with **exposed or directly palpable fascia, muscle, tendon, ligament, cartilage, or bone.** Epibole, undermining, and tunneling are common. The presence of any of these structural tissues distinguishes Stage 4 from Stage 3.
 
 ### Unstageable — Obscured full-thickness loss
 
-A full-thickness injury whose base is **obscured by slough or eschar** to the point that the true extent of tissue loss cannot be confirmed. It is, in effect, a hidden Stage 3 or Stage 4; once the bed is cleaned or debrided and the depth becomes visible, it is restaged accordingly. One clinical caution is encoded here: **stable eschar** — dry, adherent, intact, with no surrounding erythema or fluctuance — on an ischemic limb or heel serves as the body's natural cover and should **not** be debrided.
+A full-thickness injury whose base is **obscured by slough or eschar** to the point that the true extent of tissue loss cannot be confirmed. It is a hidden Stage 3 or Stage 4; once the bed is cleaned or debrided and the depth becomes visible, it is restaged accordingly. One clinical caution is encoded here: **stable eschar** — dry, adherent, intact, with no surrounding erythema or fluctuance — on an ischemic limb or heel serves as the body's natural cover and should **not** be debrided.
 
 ### Deep Tissue Pressure Injury (DTPI)
 
-Persistent, non-blanchable **deep red, maroon, or purple** discoloration, or epidermal separation revealing a dark wound bed or a **blood-filled** blister. DTPI can evolve rapidly to reveal the true extent of injury, or it can resolve without tissue loss. Along with Stage 1, DTPI is the hardest presentation to detect in darkly pigmented skin, where the discoloration blends with baseline pigmentation. Because its trajectory is uncertain and its surface appearance understates the underlying damage, DTPI is one of the cases Sorbed routes to a clinician rather than committing to a numeric stage.
+Persistent, non-blanchable **deep red, maroon, or purple** discoloration, or epidermal separation revealing a dark wound bed or a **blood-filled** blister. DTPI can evolve rapidly to reveal the true extent of injury, or it can resolve without tissue loss. Along with Stage 1, DTPI is among the hardest presentations to detect in darkly pigmented skin, where the discoloration blends with baseline pigmentation. Because its trajectory is uncertain and its surface appearance understates the underlying damage, DTPI is one of the cases Sorbed routes to a clinician rather than committing to a numeric stage.
 
 ### Special situations
 
-- **Medical Device Related Pressure Injury (MDRPI):** results from a device (tubing, mask, brace) and typically **conforms to the shape of the device**. It is still staged on the ordinary 1–4 / Unstageable / DTPI scale; the device relationship is a flag, not a separate stage.
+- **Medical Device Related Pressure Injury (MDRPI):** results from a device (tubing, mask, brace) and typically **conforms to the shape of the device**. It is staged on the ordinary 1–4 / Unstageable / DTPI scale; the device relationship is a flag, not a separate stage.
 - **Mucosal Membrane Pressure Injury:** found on mucous membranes with a history of a device at that location. Because mucosal tissue lacks the layered structure the staging system depends on, these injuries **cannot be staged.**
 
 ## Tissue types and their appearance
 
-Staging in Sorbed is driven by *which tissues are present*, so the system's tissue vocabulary is foundational. Each type has a characteristic color and texture that the perception layer is trained to recognize:
+Staging in Sorbed is driven by *which tissues are present*, so the tissue vocabulary is foundational. Each type has a characteristic color and texture that the perception layer is trained to recognize:
 
 | Tissue | Appearance | Staging significance |
 |---|---|---|
@@ -61,13 +61,13 @@ Staging in Sorbed is driven by *which tissues are present*, so the system's tiss
 | Tendon | Yellow-white, shiny | Establishes **Stage 4** |
 | Bone | White or tan, hard | Establishes **Stage 4** |
 
-The older **Red-Yellow-Black (RYB)** system is supported as a legacy proxy: red maps to granulation, yellow to slough, and black to eschar. It is a useful coarse summary but far less expressive than the full inventory above, and Sorbed treats it as a derived view rather than the primary classification.
+The older **Red-Yellow-Black (RYB)** system is supported as a legacy proxy: red maps to granulation, yellow to slough, and black to eschar. It is a coarse summary and less expressive than the full inventory above, and Sorbed treats it as a derived view rather than the primary classification.
 
-The essential point for developers is that **stage gating is tissue-presence driven, not percentage driven.** Visible fat forces the stage to at least 3; any visible structural tissue forces Stage 4; a bed obscured by slough or eschar forces Unstageable; and intact skin with maroon or purple discoloration indicates DTPI. Tissue *percentages* do not change the stage — they feed the monitoring scales described later, which track healing over time rather than establishing depth.
+The key point for developers is that **stage gating is tissue-presence driven, not percentage driven.** Visible fat forces the stage to at least 3; any visible structural tissue forces Stage 4; a bed obscured by slough or eschar forces Unstageable; and intact skin with maroon or purple discoloration indicates DTPI. Tissue *percentages* do not change the stage — they feed the monitoring scales described below, which track healing over time rather than establishing depth.
 
 ## Metrics and measurement conventions
 
-Sorbed records wound geometry using conventions that are standard in wound care and unambiguous enough to compute reproducibly:
+Sorbed records wound geometry using conventions that are standard in wound care and defined precisely enough to compute reproducibly:
 
 - **Length** is the greatest **head-to-toe** dimension. Sorbed uses a clock-face convention in which 12:00 points toward the patient's head.
 - **Width** is the greatest **side-to-side** dimension measured **perpendicular** to the length.
@@ -78,11 +78,11 @@ Sorbed records wound geometry using conventions that are standard in wound care 
 - **Periwound skin** (within roughly 4 cm of the margin) is assessed for maceration (white, soggy), erythema, induration, edema, and callus.
 - **Exudate** is recorded by amount (none / scant / small / moderate / large) and by type (serous / sanguineous / serosanguineous / purulent).
 
-The clock convention bears repeating because it anchors every positional measurement: **12:00 is toward the patient's head.**
+The clock convention anchors every positional measurement: **12:00 is toward the patient's head.**
 
 ## Monitoring scales
 
-Staging captures depth; it does not capture healing. For longitudinal tracking, Sorbed computes the established wound-monitoring scales, and it is explicit about which sub-items an image can support and which require a clinician at the bedside.
+Staging captures depth; it does not capture healing. For longitudinal tracking, Sorbed computes the established wound-monitoring scales and specifies which sub-items an image can support and which require a clinician at the bedside.
 
 ### PUSH Tool 3.0
 
@@ -92,7 +92,7 @@ The Pressure Ulcer Scale for Healing produces a total from 0 to 17, where 0 is a
 - **Exudate amount (0–3).**
 - **Tissue type (0–4)** by the **worst** tissue present: 0 = closed, 1 = epithelial, 2 = granulation, 3 = slough, 4 = necrotic/eschar.
 
-Size and tissue type are computable from an image; exudate is best confirmed by the clinician.
+Size and tissue type are computable from an image; exudate is confirmed by the clinician.
 
 ### BWAT (Bates-Jensen Wound Assessment Tool)
 
@@ -102,7 +102,7 @@ Computable from an image: size, edges, necrotic tissue type and amount, periwoun
 
 ### Sessing Scale
 
-Introduced by Ferrell in 1995, the Sessing Scale is a 7-point ordinal measure (0–6) that monitors healing by capturing granulation, infection, necrosis, and eschar, independent of size and depth. It is partly computable — the tissue-appearance components can be estimated — but infection and odor are not observable in a photograph. The exact per-level anchor text should be taken from the original publication before implementing the scoring thresholds.
+Introduced by Ferrell in 1995, the Sessing Scale is a 7-point ordinal measure (0–6) that monitors healing by capturing granulation, infection, necrosis, and eschar, independent of size and depth. It is partly computable — the tissue-appearance components can be estimated — but infection and odor are not observable in a photograph. The per-level anchor text should be taken from the original publication before implementing the scoring thresholds.
 
 ### DESIGN-R®2020
 
@@ -127,11 +127,11 @@ IF skin BROKEN and full-thickness:
    ELIF adipose (fat) visible → Stage 3
 ```
 
-The ordering is not incidental. Mucosal and device checks come first because they change how everything downstream is interpreted. Within intact skin, DTPI is tested before Stage 1 so that maroon and purple discoloration is never misfiled as ordinary erythema. Within broken skin, the obscured-bed check precedes the depth checks because you cannot assert a depth you cannot see.
+The ordering is significant. Mucosal and device checks come first because they change how everything downstream is interpreted. Within intact skin, DTPI is tested before Stage 1 so that maroon and purple discoloration is not misfiled as ordinary erythema. Within broken skin, the obscured-bed check precedes the depth checks because a depth that cannot be seen cannot be asserted.
 
 ## Explainability payload
 
-A clinician should never be handed a bare stage. Every Sorbed result carries an evidence trace designed to be inspected and, where necessary, overruled:
+Each Sorbed result carries an evidence trace that can be inspected and, where necessary, overruled:
 
 - a **skin integrity** flag (intact vs. broken);
 - a **tissue inventory** with per-type percentage and confidence, plus an inspectable overlay showing where each tissue was detected;
@@ -140,11 +140,11 @@ A clinician should never be handed a bare stage. Every Sorbed result carries an 
 - **edge and periwound findings**;
 - the computed **metrics**, including the PUSH, BWAT, and DESIGN-R subscores.
 
-Underpinning all of it is a commitment to **calibrated confidence**. Sorbed reports how sure it is, and it **abstains — deferring to the clinician — on low-confidence results and on the DTPI and Unstageable categories**, which are, in principle, not fully resolvable from a single surface photograph. Abstention here is a feature, not a failure mode.
+The system reports **calibrated confidence**. Sorbed reports how sure it is, and it **abstains — deferring to the clinician — on low-confidence results and on the DTPI and Unstageable categories**, which are, in principle, not fully resolvable from a single surface photograph.
 
 ## Sources
 
-The clinical content above is drawn from the following authoritative bodies. Primary PDFs should be obtained directly from these sources for the verbatim scoring anchors, which govern in any case of discrepancy with this summary.
+The clinical content above is drawn from the following bodies. Primary PDFs should be obtained directly from these sources for the verbatim scoring anchors, which govern in any case of discrepancy with this summary.
 
 - [NPIAP — pressure injury staging system](https://npiap.com/)
 - [EPUAP — pressure ulcer classification](https://www.epuap.org/)

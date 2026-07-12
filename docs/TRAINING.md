@@ -1,23 +1,23 @@
 # Training & Serving a Learned Segmentation Backend
 
-This guide walks through training a wound-boundary segmenter, exporting it to
+This guide covers training a wound-boundary segmenter, exporting it to
 ONNX, registering it with integrity verification, and serving it through Sorbed's
-`onnx` backend. Read `docs/MODELS.md` first — it is an honest accounting of the
-**data-poverty reality** of this field, and it shapes every expectation below.
+`onnx` backend. See `docs/MODELS.md` first — it documents the
+**data-poverty reality** of this field, which shapes the expectations below.
 
-## The honest starting point
+## Starting point
 
 There is **no verifiable public, permissively-licensed pressure-injury *staging*
-dataset**, and tissue-labeled data is tiny. What *is* reasonably good is **binary
-wound-boundary segmentation**, where public data exists and models routinely reach
-Dice in the 0.85–0.93 range. So this pipeline targets the tractable task —
-drawing *where* the wound is — and Sorbed stays deliberately humble about *what*
-each pixel is and *how* to stage it. Do not expect a boundary model trained on
-foot ulcers to be a validated pressure-injury classifier; it is not.
+dataset**, and tissue-labeled data is limited. Public data does exist for **binary
+wound-boundary segmentation**, where models routinely reach
+Dice in the 0.85–0.93 range. This pipeline targets that task —
+segmenting *where* the wound is — and Sorbed does not classify *what*
+each pixel is or *how* to stage it. A boundary model trained on
+foot ulcers is not a validated pressure-injury classifier.
 
 ## 1. Prepare data
 
-Use two public binary wound-segmentation sets, both distributed from
+Two public binary wound-segmentation sets, both distributed from
 [github.com/uwm-bigdata/wound-segmentation](https://github.com/uwm-bigdata/wound-segmentation):
 
 - **AZH Chronic Wound** — ~1,109 images with binary masks.
@@ -37,7 +37,7 @@ stack does not relax a data license.
 
 ## 2. Install the ML stack
 
-Training needs the heavy optional dependencies (kept out of the core install and
+Training requires the heavy optional dependencies (kept out of the core install and
 never imported at module load):
 
 ```bash
@@ -64,21 +64,21 @@ The script builds the chosen architecture (default: a U-Net with an
 ImageNet-pretrained EfficientNet-b0 encoder), trains with a combined **Dice +
 BCE** loss, holds out a validation split, reports **per-epoch validation Dice**,
 and checkpoints the best model to `artifacts/segmenter/best.pt`. Use `--device
-cpu` to force CPU, or `cuda` for a GPU; `auto` (default) picks CUDA when
+cpu` to force CPU, or `cuda` for a GPU; `auto` (default) selects CUDA when
 available.
 
 ### Architecture (`--arch`)
 
-Routed through `segmentation-models-pytorch`, so you can pick the recipe:
+Routed through `segmentation-models-pytorch`:
 
 | `--arch` | Recipe | Notes |
 |---|---|---|
 | `unet` (default) | U-Net + EfficientNet encoder + scSE | the FUSegNet-line CNN recipe |
-| `deeplabv3plus`, `manet` | strong CNN alternatives | with EfficientNet/ResNet encoders |
+| `deeplabv3plus`, `manet` | CNN alternatives | with EfficientNet/ResNet encoders |
 | `segformer` | **SegFormer transformer** | pair with a MiT encoder: `--encoder mit_b2` (CPU-reasonable, ~25M) or `mit_b3` |
 
 All architectures export to ONNX for CPU inference. `--decoder-attention scse`
-applies only to `unet`/`unetplusplus`; it is ignored by the others. The modern
+applies only to `unet`/`unetplusplus`; it is ignored by the others. The
 transformer recipe is:
 
 ```bash
@@ -86,9 +86,9 @@ python scripts/train_segmenter.py --images imgs/ --masks masks/ \
     --arch segformer --encoder mit_b2 --encoder-weights imagenet --input-size 512
 ```
 
-The perennial CNN baseline (nnU-Net) and state-space (Mamba) / promptable
-foundation models (SAM-2, MedSAM-2, BiomedParse) are the current frontier but are
-**not** integrated here — they are GPU/prompt-oriented and outside `smp`. See
+The CNN baseline (nnU-Net) and state-space (Mamba) / promptable
+foundation models (SAM-2, MedSAM-2, BiomedParse) are **not** integrated here;
+they are GPU/prompt-oriented and outside `smp`. See
 [`MODELS.md`](MODELS.md) for the cited landscape.
 
 ### scSE decoder attention (`--decoder-attention`)
@@ -117,10 +117,10 @@ supply local weights.
 
 At the end of training the script restores the best checkpoint and exports
 `artifacts/segmenter/model.onnx` with a fixed `(1, 3, H, W)` input and a
-`(1, 1, H, W)` foreground-logit output — exactly the layout the `OnnxSegmenter`
-reads. It prints the file's **SHA-256**; keep it.
+`(1, 1, H, W)` foreground-logit output — the layout the `OnnxSegmenter`
+reads. It prints the file's **SHA-256**.
 
-You can re-hash at any time:
+The file can be re-hashed at any time:
 
 ```bash
 sha256sum artifacts/segmenter/model.onnx
@@ -128,7 +128,7 @@ sha256sum artifacts/segmenter/model.onnx
 
 ## 5. Register the weights (integrity verification)
 
-Host `model.onnx` somewhere fetchable and add an entry to `models/registry.json`
+Host `model.onnx` at a fetchable location and add an entry to `models/registry.json`
 (create the file if it does not exist):
 
 ```json
@@ -149,7 +149,7 @@ Host `model.onnx` somewhere fetchable and add an entry to `models/registry.json`
 
 `download_weights()` streams the file, verifies the SHA-256, and **fails closed**
 (deletes the file and raises) on any mismatch. Only `.onnx` / `.safetensors` are
-accepted — Sorbed never loads pickle-based formats. Then copy
+accepted — Sorbed does not load pickle-based formats. Then copy
 `model_cards/TEMPLATE.md` to `model_cards/unet-fuseg-azh.md` and complete it,
 including the **required skin-tone evaluation**.
 
@@ -165,7 +165,7 @@ export SORBED_ONNX_MODEL=artifacts/segmenter/model.onnx
 The backend loads the model through ONNX Runtime (CUDA when available, otherwise
 CPU), resizes each image to the model's expected input, runs inference, applies a
 sigmoid (or softmax for two-class outputs), thresholds at 0.5, keeps the largest
-connected component, and reports a **real confidence** — the mean predicted wound
+connected component, and reports a **confidence value** — the mean predicted wound
 probability inside the mask. The model's SHA-256 is recorded on every result for
 provenance.
 
@@ -178,21 +178,21 @@ export SORBED_ONNX_STD="0.229,0.224,0.225"
 export SORBED_ONNX_INPUT="512"   # fallback H=W only if the model has dynamic axes
 ```
 
-If `SORBED_ONNX_MODEL` is unset or missing, the backend raises a clear error
-telling you to set it or run `sorbed models pull` — it never silently falls back
-or fabricates a mask.
+If `SORBED_ONNX_MODEL` is unset or missing, the backend raises an error
+directing the caller to set it or run `sorbed models pull`; it does not silently fall back
+or fabricate a mask.
 
 ---
 
-## Reproduce the real FUSeg-trained model (end to end)
+## Reproduce the FUSeg-trained model (end to end)
 
-This trains a real wound-segmentation model on real clinical data and runs it in
+This trains a wound-segmentation model on clinical data and runs it in
 the pipeline — no HuggingFace, no synthetic data.
 
 ```bash
 pip install -e '.[dev,ml]' torch segmentation-models-pytorch
 
-# 1. Fetch real wound images + expert masks (MICCAI FUSeg, committed on GitHub).
+# 1. Fetch wound images + expert masks (MICCAI FUSeg, committed on GitHub).
 python scripts/fetch_fuseg.py --out data/fuseg --split train --limit 300
 python scripts/fetch_fuseg.py --out data/fuseg --split validation --limit 60
 
@@ -203,7 +203,7 @@ python scripts/train_segmenter.py \
   --encoder mobilenet_v2 --encoder-weights none \
   --input-size 224 --epochs 20 --batch-size 8 --out-dir artifacts/segmenter
 
-# 3. Run the trained model through Sorbed on held-out real images.
+# 3. Run the trained model through Sorbed on held-out images.
 export SORBED_SEGMENTATION_BACKEND=onnx
 export SORBED_ONNX_MODEL=artifacts/segmenter/model.onnx
 sorbed analyze data/fuseg/validation/images/0002.png --out reports
@@ -211,19 +211,18 @@ sorbed analyze data/fuseg/validation/images/0002.png --out reports
 
 **Reference result (this exact recipe, CPU, from scratch):** best validation
 Dice ≈ **0.64** after 20 epochs at 224 px with a randomly-initialized
-MobileNetV2 encoder. That is a genuine trained model, not a strong one — it
-misses small or subtle ulcers. Using an ImageNet-pretrained encoder, 512 px
-input, and more epochs (as in the literature) reaches ≈0.85+ Dice; do that where
-the encoder-weight host is reachable.
+MobileNetV2 encoder. This model misses small or subtle ulcers. Using an
+ImageNet-pretrained encoder, 512 px input, and more epochs (as in the literature)
+reaches ≈0.85+ Dice where the encoder-weight host is reachable.
 
-**Notes that matter:**
+**Notes:**
 
 - The ONNX backend reads the model's fixed input size from the graph; for a
   dynamic-axis model set `SORBED_ONNX_INPUT`. Normalization defaults to ImageNet
   (`SORBED_ONNX_MEAN` / `SORBED_ONNX_STD` to override) and must match training.
 - Sorbed runs the **learned segmenter on the raw image** (matching its training
   distribution); color normalization is applied only to the tissue-color
-  analysis. Train your model on un-color-normalized images accordingly.
+  analysis. Train the model on un-color-normalized images accordingly.
 - Register the exported `model.onnx` SHA-256 in `models/registry.json` (see the
   registry) so results are tied to exact weights. Do not commit weights or the
   dataset — both are `.gitignore`d.

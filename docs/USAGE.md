@@ -1,6 +1,6 @@
 # Usage
 
-A practical guide to running Sorbed from the command line and from Python, calibrating scale, and reading the results. For the clinical reasoning behind the grades, see [`CLINICAL.md`](CLINICAL.md); for the honest data-and-model picture, [`MODELS.md`](MODELS.md).
+This document covers running Sorbed from the command line and from Python, calibrating scale, and reading the results. For the clinical reasoning behind the grades, see [`CLINICAL.md`](CLINICAL.md); for the data-and-model description, [`MODELS.md`](MODELS.md).
 
 > Sorbed is decision support, not a diagnosis. Every result must be reviewed by a qualified clinician. See [`../DISCLAIMER.md`](../DISCLAIMER.md).
 
@@ -27,7 +27,7 @@ Add extras only for what you need:
 pip install -e ".[formats,api]"
 ```
 
-Check which decoders actually resolved on your machine with `sorbed formats`.
+Check which decoders resolved in the current environment with `sorbed formats`.
 
 ## CLI
 
@@ -93,7 +93,7 @@ Decode an image and report its metadata and detected scale, without grading it.
 sorbed inspect wound.dcm
 ```
 
-Prints the detected format, dimensions, bit depth, calibration status, the resolved scale (if any), and any retained metadata tags. Useful for confirming a DICOM's pixel spacing was read, or that a fiducial was found, before you commit to a full analysis.
+Prints the detected format, dimensions, bit depth, calibration status, the resolved scale (if any), and any retained metadata tags. This confirms that a DICOM's pixel spacing was read, or that a fiducial was found, before a full analysis is run.
 
 ### `sorbed formats`
 
@@ -117,9 +117,9 @@ Print the installed Sorbed version.
 
 ## Calibrating scale
 
-Physical measurements (cm², mm) require knowing how many millimeters one pixel spans. Sorbed **never fabricates** this — with no scale, area and length come back as `null` and only pixel metrics are reported. There are three ways to supply it, in rough order of convenience:
+Physical measurements (cm², mm) require knowing how many millimeters one pixel spans. Sorbed does not fabricate this — with no scale, area and length come back as `null` and only pixel metrics are reported. There are three ways to supply it:
 
-1. **Manual `--mm-per-px`.** If you already know the scale (e.g. from a fixed-distance imaging rig), pass it directly: `--mm-per-px 0.15`. Recorded as calibration status `manual_mm_per_px`.
+1. **Manual `--mm-per-px`.** When the scale is already known (e.g. from a fixed-distance imaging rig), pass it directly: `--mm-per-px 0.15`. Recorded as calibration status `manual_mm_per_px`.
 2. **ArUco fiducial marker (`--marker-mm`).** Place a printed ArUco marker of known side length flat in the wound plane and pass that length in millimeters. Sorbed detects the marker and derives the scale. Status `fiducial_marker`.
 3. **Reference coin (`--coin-mm`).** Place a coin of known diameter in the wound plane and pass the diameter. Status `fiducial_marker` via a circular reference.
 
@@ -127,7 +127,7 @@ DICOM images can carry pixel spacing in their headers; when present it is read a
 
 ## Interpreting the JSON
 
-The canonical `WoundAnalysis` JSON is the single source of truth; every image artifact is a rendering of it. The fields you will read most often:
+The canonical `WoundAnalysis` JSON is the authoritative record; every image artifact is a rendering of it. The most commonly read fields:
 
 ### `decision`
 
@@ -153,7 +153,7 @@ The canonical `WoundAnalysis` JSON is the single source of truth; every image ar
 }
 ```
 
-`abstained: true` — or a stage of `indeterminate` — means the evidence did not support a confident grade and Sorbed deliberately deferred to a clinician. The `evidence` list is the auditable heart of the result: each `metric_ref` resolves to an actual field elsewhere in the JSON, so you can trace any claim back to the number that produced it.
+`abstained: true` — or a stage of `indeterminate` — means the evidence did not support a confident grade and Sorbed deferred to a clinician. The `evidence` list is the auditable core of the result: each `metric_ref` resolves to an actual field elsewhere in the JSON, so any claim can be traced back to the number that produced it.
 
 ### `metrics.geometry`
 
@@ -178,7 +178,7 @@ Per-tissue area fractions over the **wound bed only**, summing to 1:
 { "granulation": 0.58, "slough": 0.27, "eschar": 0.09, "epithelial": 0.06 }
 ```
 
-`metrics.tissue.dominant` names the largest class, and `metrics.tissue.mean_confidence` gives per-class classifier confidence. Remember the honest framing from [`MODELS.md`](MODELS.md): these are percentage estimates with confidence, not crisp per-pixel claims, and slough/granulation is the classic confusable pair.
+`metrics.tissue.dominant` names the largest class, and `metrics.tissue.mean_confidence` gives per-class classifier confidence. As described in [`MODELS.md`](MODELS.md), these are percentage estimates with confidence, not per-pixel claims, and slough and granulation are frequently confused.
 
 ### `healing_scores`
 
@@ -204,16 +204,16 @@ Image-derivable sub-scores of the standard monitoring instruments. Items needing
 
 ## Interpreting the artifacts
 
-- **Mask** (`*_mask.png`) — the binary wound boundary. Sanity-check that Sorbed outlined the wound and not a shadow or dressing.
-- **Overlay** (`*_overlay.png`) — tissue classes colored over the original photo. This is where you eyeball whether granulation, slough, and eschar landed on the right regions.
+- **Mask** (`*_mask.png`) — the binary wound boundary. Used to verify that Sorbed outlined the wound and not a shadow or dressing.
+- **Overlay** (`*_overlay.png`) — tissue classes colored over the original photo. Used to verify that granulation, slough, and eschar landed on the correct regions.
 - **Guide** (`*_guide.png`) — the clinician-facing annotated photo: wound contour, length × width, a scale bar (when calibrated), a tissue legend, and the grade banner.
-- **Schematic** (`*_schematic.png`) — a clean synthetic drawing of the sore with no photographic noise, good for records or side-by-side monitoring over time.
+- **Schematic** (`*_schematic.png`) — a synthetic drawing of the sore with no photographic noise, for records or side-by-side monitoring over time.
 - **Schematic guide** (`*_schematic_guide.png`) — the schematic annotated with measurements and labels.
 - **HTML** (`*.html`) — a single self-contained report bundling the guide image, the grade with its evidence and caveats, metrics, and the disclaimer. Open it in any browser; install `[report]` to also render PDF.
 
 ## Python API
 
-The same pipeline the CLI uses is a two-line import:
+The same pipeline the CLI uses is available as a two-line import:
 
 ```python
 from sorbed.pipeline import analyze_image, AnalyzeOptions

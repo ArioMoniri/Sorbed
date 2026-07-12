@@ -21,7 +21,7 @@ HTTP. Every endpoint is mounted under the `/v1` prefix.
   image metadata (EXIF/DICOM tags) before sending an image. The service reads
   pixels for analysis; it does not need identifying metadata.
 - Responses contain only the computed analysis. No original image bytes are
-  returned unless you explicitly request the rendered guide.
+  returned unless the rendered guide is explicitly requested.
 
 ## Running the service
 

@@ -21,8 +21,8 @@ Because MIG is on, the GPU is exposed as MIG **instances**, not as device
 index 0. Training must be pinned to a MIG instance **UUID** via
 `CUDA_VISIBLE_DEVICES` (see step 4). The `~40 GB` budget is why the default
 config (`training/configs/seg_unetpp_effnet.yaml`) uses `batch_size: 8` at
-`768 px` — that fits comfortably in one slice. Raise `--input-size` to 1024 or
-lower the batch size if you switch to a larger MIG profile or hit OOM.
+`768 px`, which fits in one slice. Raise `--input-size` to 1024 or
+lower the batch size for a larger MIG profile or on OOM.
 
 The scripts referenced below live in `training/server/`:
 
@@ -37,7 +37,7 @@ The scripts referenced below live in `training/server/`:
 
 ## 1. Transfer the repo (laptop → server)
 
-From the repo root **on your laptop**:
+From the repo root **on the laptop**:
 
 ```bash
 bash training/server/transfer.sh
@@ -60,7 +60,7 @@ Preview what would be sent without writing anything:
 DRY_RUN=1 bash training/server/transfer.sh
 ```
 
-SSH authentication is whatever your `ssh-agent` / `~/.ssh/config` already
+SSH authentication is whatever the `ssh-agent` / `~/.ssh/config` already
 provides — no keys or passwords are stored in the repo.
 
 ---
@@ -84,7 +84,7 @@ bash training/server/setup_env.sh
 the `[ml]` extra, and prints a CUDA sanity check.
 
 Detach from tmux any time with **Ctrl-b** then **d**. The setup does not need to
-stay attached, but running it inside tmux means an interrupted SSH session won't
+stay attached; running it inside tmux means an interrupted SSH session does not
 abort the (long) pip install.
 
 ---
@@ -217,15 +217,15 @@ tmux kill-session -t sorbed-train    # stop the training run
 
 Attaching and detaching never interrupt the job — only `kill-session` (or the
 process finishing) ends it. The pane is configured with `remain-on-exit on`, so
-after training finishes the final output stays visible when you attach; run
+after training finishes the final output stays visible on attach; run
 `tmux kill-session -t sorbed-train` to clean it up.
 
 ---
 
 ## 6. Export & verify ONNX (on the server)
 
-The config sets `export_onnx: true`, so `train_seg` **already writes the ONNX
-model at the end of the run** from the best-by-val-Dice checkpoint. Artifacts in
+The config sets `export_onnx: true`, so `train_seg` writes the ONNX
+model at the end of the run from the best-by-val-Dice checkpoint. Artifacts in
 `artifacts/seg_unetpp/`:
 
 ```
@@ -252,8 +252,8 @@ print("ok:", i.shape, "->", out.shape)
 PY
 ```
 
-If you only need to re-export from an existing checkpoint (e.g. after copying a
-`best.pt` around), re-run `train_seg` with `--epochs 0` is **not** supported;
+To re-export from an existing checkpoint (e.g. after copying a
+`best.pt` around), re-running `train_seg` with `--epochs 0` is **not** supported;
 instead re-run training, or load `best.pt` and call
 `training.models.export_onnx` directly.
 
@@ -261,7 +261,7 @@ instead re-run training, or load `best.pt` and call
 
 ## 7. Copy weights back (server → laptop)
 
-Pull only the artifacts you need — run this **from the laptop**:
+Pull only the required artifacts — run this **from the laptop**:
 
 ```bash
 rsync -avhP -e "ssh -p 30405" \
@@ -287,8 +287,8 @@ export SORBED_ONNX_MODEL=$(pwd)/artifacts/seg_unetpp/model.onnx
 ## One-shot curl bootstrap (clone + setup + data + launch)
 
 Steps 1–4 above are the explicit, inspectable path. Once the branch is on
-GitHub, `training/server/bootstrap.sh` collapses them into a single command you
-paste on the server — it clones (or fast-forwards) the repo, runs
+GitHub, `training/server/bootstrap.sh` collapses them into a single command run
+on the server — it clones (or fast-forwards) the repo, runs
 `setup_env.sh`, fetches the open FUSeg data with `scripts/fetch_fuseg.py`, and
 launches training via `run_tmux.sh`. It is idempotent and safe to re-run.
 
@@ -321,14 +321,14 @@ argv — configuration is entirely by environment variable):
 | `SKIP_TRAIN=1` | off | stop after setup+data; do not launch training |
 
 The script prints the monitor / attach / stop commands when it finishes. To
-launch a different recipe (e.g. the SegFormer config) just override `CONFIG`:
+launch a different recipe (e.g. the SegFormer config) override `CONFIG`:
 
 ```bash
 CONFIG=training/configs/seg_segformer.yaml MIG_UUID=MIG-... \
   curl -fsSL https://raw.githubusercontent.com/ArioMoniri/Sorbed/claude/bedsore-grading-system-wcd4ol/training/server/bootstrap.sh | bash
 ```
 
-If you prefer to review the script before running it (recommended for any
+To review the script before running it (recommended for any
 piped-to-shell command), download it first:
 
 ```bash
@@ -347,8 +347,8 @@ degrades throughput instead of killing the run:
 - **VRAM OOM → automatic recovery.** On a CUDA out-of-memory error the training
   step empties the cache and **retries the batch split into more micro-batches**
   (gradient accumulation — the effective batch is unchanged). The working split
-  is remembered, so later steps skip straight to it. You'll see
-  `[mem] CUDA OOM — retrying batch in N micro-batches` in the log; validation
+  is remembered, so later steps skip straight to it. The log shows
+  `[mem] CUDA OOM — retrying batch in N micro-batches`; validation
   forward passes shrink the same way.
 - **Proactive cap.** Set `--vram-fraction 0.92` (or the `vram_fraction:` config
   key) to cap the process to a share of the slice so it OOMs *catchably* early
@@ -359,7 +359,7 @@ degrades throughput instead of killing the run:
   `--batch-size` if a run still can't fit.
 
 If OOM persists even at micro-batch = 1, the run stops with a clear message to
-lower `--input-size`/`--batch-size` — never a bare CUDA crash.
+lower `--input-size`/`--batch-size` rather than raising a bare CUDA crash.
 
 ## MedSAM / SAM weights without an API key (mask-factory path)
 
@@ -378,7 +378,7 @@ python -m training.finetune_medsam train \
 
 `fetch_models` also serves `sam-vit-base/large/huge` (transformers format) and the
 original Meta SAM / SAM-2.1 CDN checkpoints. `SAM 3` is gated (needs a token) and
-is intentionally not offered.
+is not offered.
 
 ## Quick reference
 

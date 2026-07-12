@@ -1,18 +1,19 @@
 # Preparing wound datasets for training
 
-This directory turns wound-imaging datasets on disk into **patient-level,
-leakage-free** training manifests. Nothing here downloads data. Several of the
-useful datasets are **gated** (you must apply and accept a data-use agreement) or
-ship **without an explicit license** — you place them locally by hand, then point
-the tooling at the folder.
+This directory converts wound-imaging datasets on disk into **patient-level,
+leakage-free** training manifests. It does not download data. Several of the
+relevant datasets are **gated** (an application and data-use agreement are
+required) or ship **without an explicit license** — they are placed locally by
+hand, then the tooling is pointed at the folder.
 
-> **Honest scope.** The strongest open segmentation data is diabetic-foot-only and
+> **Scope.** The strongest open segmentation data is diabetic-foot-only and
 > carries no severity grade. There is **no** open, permissively-licensed dataset
 > that is simultaneously pressure-injury, NPIAP-staged, segmented, and
-> longitudinal. Build the wound-**segmentation** model from open data; source
-> staged/longitudinal pressure-injury data through a clinical partnership. Every
-> `license` tag written into the manifest is hygiene metadata, not legal advice —
-> re-check each source's terms before any non-research use.
+> longitudinal. The wound-**segmentation** model is built from open data;
+> staged/longitudinal pressure-injury data is sourced through a clinical
+> partnership. Every `license` tag written into the manifest is hygiene metadata,
+> not legal advice — each source's terms should be re-checked before any
+> non-research use.
 
 ## What the tooling expects
 
@@ -46,8 +47,7 @@ becomes its own singleton `patient_id` (`"<source>:<stem>"`). The split is still
 leakage-free by construction; there is simply no cross-visit grouping to protect.
 For a source that *is* longitudinal (repeat visits per patient), write a manifest
 directly with real `patient_id` / `visit_index` values (schema below) instead of
-using an auto-adapter — that is what preserves the no-leakage guarantee across
-visits.
+using an auto-adapter; this preserves the no-leakage guarantee across visits.
 
 ## Manifest schema
 
@@ -66,11 +66,11 @@ Each manifest row (JSONL object / CSV row) has these columns:
 
 ## Dataset-by-dataset placement
 
-Only place datasets whose terms you have satisfied. URLs below are the datasets'
+Only place datasets whose terms have been satisfied. URLs below are the datasets'
 own access pages — **do not** assume a direct download link where a dataset is
 gated.
 
-### AZH Chronic Wound + FUSeg (open, research-only) — recommended starting point
+### AZH Chronic Wound + FUSeg (open, research-only) — starting point
 
 - Source: `github.com/uwm-bigdata/wound-segmentation`.
 - Clone the repo; its `data/` folder holds the AZH and FUSeg image/label splits.
@@ -81,9 +81,9 @@ gated.
 ### DFUC 2020 / 2021 / 2022 / 2024 (GATED — data-use agreement)
 
 - Access: `dfu-challenge.github.io` and the corresponding Grand Challenge pages.
-- You must **apply and accept a DUA** by email/registration. There is no open
-  download link. After you receive the data, arrange it as a `generic` layout
-  (segmentation editions) and set `license: dfu-dua` (non-commercial).
+- An application and DUA acceptance by email/registration are required. There is
+  no open download link. After the data is received, arrange it as a `generic`
+  layout (segmentation editions) and set `license: dfu-dua` (non-commercial).
 - DFUC 2021 provides infection/ischaemia **patch labels** (not full masks); use it
   for the grading head, not segmentation.
 
@@ -92,9 +92,9 @@ gated.
 - Access: register at `chronicwounddatabase.eu` via a browser (the site blocks
   scrapers). Provides RGB + thermal + depth/3D with expert outlines; some repeat
   visits (weakly longitudinal), mixed body parts.
-- Export the RGB photos and expert outline masks into a `generic` layout. If you
-  can recover per-patient visit grouping, write `patient_id`/`visit_index`
-  yourself to keep visits from leaking.
+- Export the RGB photos and expert outline masks into a `generic` layout. If
+  per-patient visit grouping can be recovered, write `patient_id`/`visit_index`
+  to keep visits from leaking.
 
 ### Medetec (open, free reuse)
 
@@ -109,9 +109,9 @@ gated.
   `stage_label` from the class folder names. No explicit license — research risk.
 - **Guideline caveat:** most sources describe PIID's stages as **EPUAP I–IV**, not
   NPIAP — confirm against the dataset card before relying on it for the teacher.
-  In practice Stages 1–4 share the NPIAP/EPUAP 2019 joint definitions, so the
-  numeric labels line up; only the provenance note differs. DTI/Unstageable are
-  absent, so PIID cannot supply those two classes.
+  Stages 1–4 share the NPIAP/EPUAP 2019 joint definitions, so the numeric labels
+  line up; only the provenance note differs. DTI/Unstageable are absent, so PIID
+  cannot supply those two classes.
 
 ### Kaggle mixed sets (open, inherit source licenses)
 
@@ -153,7 +153,7 @@ run asserts no `patient_id` appears in two splits before writing.
 
 ## Feeding the training loop
 
-There are two ways into the training loop, and they are complementary:
+There are two entry points into the training loop, and they are complementary:
 
 - **Directory path (default in `RUNBOOK.md`).** `training/train_seg.py` reads
   `--images`/`--masks` directories directly (paired by stem) and takes an optional
@@ -162,8 +162,8 @@ There are two ways into the training loop, and they are complementary:
 - **Manifest path (multi-source / MedSAM / grouped-CV).** `datasets.py` exposes
   `WoundSegmentationDataset`, which reads a `data_prep.py` manifest split and yields
   the `(image CHW float32, mask 1×H×W float32)` tensors, and `finetune_medsam.py`
-  consumes the same manifests via `read_manifest`. Use this when you aggregate
-  several sources or need visit-level leakage control.
+  consumes the same manifests via `read_manifest`. Use this when aggregating
+  several sources or when visit-level leakage control is needed.
 
 Augmentation and colour normalization come from `build_train_transform` /
 `build_val_transform` (albumentations, gray-world white-balance + ImageNet
@@ -173,14 +173,14 @@ standardization). Install the training extras first:
 pip install torch torchvision segmentation-models-pytorch albumentations
 ```
 
-(These are intentionally **not** part of the Sorbed core install; `datasets.py`
-imports them lazily so this module lints and imports without them.)
+(These are **not** part of the Sorbed core install; `datasets.py` imports them
+lazily so this module lints and imports without them.)
 
 ## Rich combined corpus
 
-The single-dataset flow above builds a solid foot-ulcer segmenter. The **rich
-combined corpus** widens that to every open, non-interactively fetchable wound
-source the dataset audit verified, aggregated for all three training tasks:
+The single-dataset flow above builds a foot-ulcer segmenter. The **rich combined
+corpus** widens that to every open, non-interactively fetchable wound source the
+dataset audit verified, aggregated for all three training tasks:
 **segmentation**, the **MedSAM mask-factory** (staged/boxed-but-maskless sets
 turned into mask targets via box/point prompts), and **teacher-student
 grading** (pressure-injury stage plus orthogonal tissue-type / depth teachers).
@@ -209,13 +209,13 @@ python training/data_prep.py \
 tags; `--dry-run` prints the exact commands without downloading; `--source NAME`
 (repeatable) fetches a subset. Nothing is fetched without `--data-root`.
 
-### Fetch methods (all URLs from the dataset audit — none invented)
+### Fetch methods (all URLs from the dataset audit)
 
 - **`fuseg`** — reuses `scripts/fetch_fuseg.py` (raw GitHub, no login).
 - **`git`** — shallow `git clone` of a public repo.
 - **`mendeley`** — Mendeley Data public files API (CC-BY, no login). If the
   public API is unreachable/changed, the tool prints the landing-page URL and
-  the expected local path instead of guessing a link.
+  the expected local path instead of a guessed link.
 - **`kaggle`** — `kaggle` CLI; needs a free API token at `~/.kaggle/kaggle.json`.
 - **`roboflow`** — Roboflow SDK export; needs a free `ROBOFLOW_API_KEY`.
 - **`manual`** — gated / registration / audit-**unverified** host. Never
@@ -240,7 +240,7 @@ pseudo-label pool).
   (8 classes incl. tendon/bone), `complexwounddb` (5 classes). Gated/unverified:
   `wounds_307`, `woundtissue_147`.
 
-### Layout, flags, and honest caveats
+### Layout, flags, and caveats
 
 The adapters understand two layouts only — `azh_fuseg` (per-split `images/` +
 `labels/`) and `generic` (flat `images/` + `masks/` paired by stem). Sources
@@ -255,9 +255,8 @@ already account for.
 Audit flags that travel with the config: guideline attribution is
 **unconfirmed** for `roboflow_stages` / `kaggle_stages` and PIID (EPUAP vs
 NPIAP); licenses are **unstated** for `dfutissue` and `complexwounddb`; and the
-hosts for `wounds_307` and `woundtissue_147` are **UNVERIFIED** — do not treat
-their download URLs as confirmed. As stated above, there is still **no** open
-dataset that is simultaneously pressure-injury, NPIAP-staged, segmented, and
-longitudinal; the combined corpus approximates it by fusing separate open axes,
-and true staged/longitudinal pressure-injury data still needs a clinical
-partnership.
+hosts for `wounds_307` and `woundtissue_147` are **UNVERIFIED** — their download
+URLs are not confirmed. As stated above, there is no open dataset that is
+simultaneously pressure-injury, NPIAP-staged, segmented, and longitudinal; the
+combined corpus approximates it by fusing separate open axes, and true
+staged/longitudinal pressure-injury data requires a clinical partnership.

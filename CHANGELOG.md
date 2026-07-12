@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the CNN FUSegNet line (`unet`/`deeplabv3plus`/`manet`) **and** the modern
   transformer recipe (`segformer` with a MiT encoder, e.g. `--encoder mit_b2`),
   all ONNX-exportable. Docs record the 2024–2026 landscape (nnU-Net, Mamba,
-  SAM-2 / MedSAM-2 / BiomedParse) as roadmap, not shipped.
+  SAM-2 / MedSAM-2 / BiomedParse) as not-yet-integrated.
 - **`training/` GPU fine-tuning package** (kept out of the CPU-only `sorbed`
   wheel; heavy deps lazy-imported). Sized for a single ~40 GB H200 MIG slice:
   - `train_seg.py` (SegFormer/MiT + U-Net++/EfficientNetV2 segmenter, AMP,
@@ -75,9 +75,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     sample count, metrics) with FedAvg aggregation, usable locally now so a
     future cross-hospital FedAvg/FedProx server drops in without a rewrite; no
     data leaves the client, only deltas.
-  - `training/STRATEGY.md` documents the decision of record (SegFormer +
-    ConvNeXt-V2 deployed; MedSAM as an offline mask factory; teacher–student
-    grading; HITL continual learning; FL later).
+  - `training/STRATEGY.md` documents the model and learning methods (SegFormer +
+    ConvNeXt-V2 deployed; MedSAM as an offline mask generator; teacher–student
+    grading; clinician-in-the-loop continual learning; federated client seam).
 - **Extended dataset corpus**: `training/fetch_corpus.py` (+ `configs/datasets.yaml`)
   aggregates the open, non-interactively fetchable wound sources — AZH·FUSeg,
   Mendeley Lower-Limb-&-Feet (CC-BY), CO2Wounds-V2, DFUTissue, WSNet,
@@ -100,6 +100,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directly into `finetune_medsam.py` via `--weights-dir`; original Meta SAM /
   SAM-2.1 CDN checkpoints are also offered. `SAM 3` (gated) is intentionally
   excluded. Corrected the PIID note (stages are EPUAP I–IV, not NPIAP).
+- **Grading benchmark** (`training/benchmark.py`): compares the learned grader
+  against the directive rule-engine baseline on a validation fold (accuracy,
+  quadratic-weighted κ, rule-engine abstention rate) and renders a montage of
+  graded images with wound-mask overlays.
+- **Trained-model results** (single-institution internal validation): segmenter
+  Dice 0.87 (AZH/FUSeg); ConvNeXt-V2 stage grader 5-fold patient-independent
+  quadratic-weighted κ = 0.919 ± 0.006 on PIID (EPUAP I–IV), balanced accuracy
+  ≈ 0.80; temperature scaling (T=3.05) reduces ECE from 0.149 to 0.039. Model
+  weights are tracked with Git LFS (see `.gitattributes`).
 
 <!--
 Template for future releases:
