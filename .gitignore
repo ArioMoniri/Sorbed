@@ -75,6 +75,10 @@ models/weights/
 *.ckpt
 *.safetensors
 !tests/**/fixtures/**/*.onnx
+# Published release weights are committed via Git LFS (see .gitattributes).
+!models/release/
+!models/release/**/*.onnx
+!models/release/**/*.pt
 
 # Sorbed: runtime artifacts and PHI-risk data (NEVER commit patient images)
 data/
