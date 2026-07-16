@@ -47,6 +47,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=None, help="YAML config; CLI overrides it")
     parser.add_argument("--images", type=Path, default=None)
     parser.add_argument("--masks", type=Path, default=None)
+    parser.add_argument("--manifest", type=Path, default=None,
+                        help="data_prep manifest (CSV/JSONL) to train on a combined, "
+                        "multi-source corpus instead of a single --images/--masks pair; "
+                        "uses the manifest's patient_id for the grouped split")
     parser.add_argument("--out-dir", type=Path, default=None)
     parser.add_argument("--arch", type=str, default=None,
                         choices=["segformer", "unet", "unetplusplus", "manet", "deeplabv3plus"])
@@ -109,11 +113,14 @@ def build_config(args: argparse.Namespace) -> dict[str, Any]:
     file_config = utils.load_yaml_config(args.config) if args.config else {}
     cli = {k: v for k, v in vars(args).items() if k != "config"}
     merged = utils.merge_cli_over_config({**_DEFAULTS, **file_config}, cli)
-    for required in ("images", "masks"):
-        if merged.get(required) is None:
-            raise SystemExit(f"--{required} is required (via CLI or config)")
-    merged["images"] = Path(merged["images"])
-    merged["masks"] = Path(merged["masks"])
+    if merged.get("manifest"):
+        merged["manifest"] = Path(merged["manifest"])
+    else:
+        for required in ("images", "masks"):
+            if merged.get(required) is None:
+                raise SystemExit(f"--{required} (or --manifest) is required (via CLI or config)")
+        merged["images"] = Path(merged["images"])
+        merged["masks"] = Path(merged["masks"])
     merged["out_dir"] = Path(merged["out_dir"])
     return merged
 
@@ -132,6 +139,27 @@ def _load_patient_groups(manifest: Path, stems: list[str]) -> list[str]:
             f"{len(missing)} images missing from patient manifest (e.g. {missing[:3]})"
         )
     return [mapping[s] for s in stems]
+
+
+def splits_from_manifest(
+    cfg: dict[str, Any],
+) -> tuple[list[tuple[Path, Path]], list[tuple[Path, Path]]]:
+    """Build ``(train_pairs, val_pairs)`` from a combined multi-source manifest.
+
+    Only rows with a ``mask_path`` are used (segmentation needs masks); the split
+    is grouped by the manifest's ``patient_id`` so no source's patient leaks.
+    """
+    from training.datasets import read_manifest
+
+    records = [r for r in read_manifest(Path(cfg["manifest"])) if r.mask_path]
+    if not records:
+        raise SystemExit(f"no masked rows in manifest {cfg['manifest']}")
+    pairs = [(Path(r.image_path), Path(r.mask_path)) for r in records]
+    groups = [r.patient_id for r in records]
+    folds = data_mod.group_kfold_indices(groups, n_splits=int(cfg["folds"]), seed=int(cfg["seed"]))
+    train_idx, val_idx = folds[int(cfg["fold"]) % len(folds)]
+    print(f"manifest: {len(records)} masked rows from {len({r.source for r in records})} source(s)")
+    return [pairs[i] for i in train_idx], [pairs[i] for i in val_idx]
 
 
 def build_splits(
@@ -192,8 +220,11 @@ def main(argv: list[str] | None = None) -> int:
     num_classes = int(cfg["num_classes"])
     size = int(cfg["input_size"])
 
-    pairs = data_mod.pair_by_stem(cfg["images"], cfg["masks"])
-    train_pairs, val_pairs = build_splits(pairs, cfg)
+    if cfg.get("manifest"):
+        train_pairs, val_pairs = splits_from_manifest(cfg)
+    else:
+        pairs = data_mod.pair_by_stem(cfg["images"], cfg["masks"])
+        train_pairs, val_pairs = build_splits(pairs, cfg)
     if not train_pairs or not val_pairs:
         raise SystemExit("empty train or val split; add more data or adjust the split")
 
