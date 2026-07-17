@@ -53,31 +53,61 @@ class MulticlassDiceCELoss(nn.Module):
     Expects ``logits`` of shape ``(N, C, H, W)`` and integer ``target`` of shape
     ``(N, H, W)`` with values in ``[0, C)``. ``ignore_index`` pixels are excluded
     from both terms.
+
+    **Partial-label (superset) supervision.** For multi-dataset training where a
+    source provides only a *wound-vs-background* mask (no tissue class), set
+    ``superset_index``: pixels with that sentinel value are known to be foreground
+    (any class other than ``background_index``) but not which one. Those pixels are
+    excluded from CE/Dice and instead add ``-log(P(foreground))`` — driving the
+    background probability down without inventing a tissue label. This lets the
+    large binary wound corpora supervise localization while the small tissue-mask
+    sets supervise the classes. ``superset_index=None`` reproduces the plain loss.
     """
 
     def __init__(self, *, num_classes: int, ce_weight: float = 1.0,
                  dice_weight: float = 1.0, ignore_index: int = -100,
-                 smooth: float = 1.0) -> None:
+                 smooth: float = 1.0, superset_index: int | None = None,
+                 background_index: int = 0, superset_weight: float = 1.0) -> None:
         super().__init__()
         self.num_classes = num_classes
         self.ce_weight = ce_weight
         self.dice_weight = dice_weight
         self.ignore_index = ignore_index
         self.smooth = smooth
+        self.superset_index = superset_index
+        self.background_index = background_index
+        self.superset_weight = superset_weight
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        ce = functional.cross_entropy(logits, target, ignore_index=self.ignore_index)
+        # Superset pixels carry no class label; exclude them from CE/Dice (treat
+        # them like ignore) and add the foreground-superset term separately below.
+        ce_target = target
+        if self.superset_index is not None:
+            ce_target = torch.where(
+                target == self.superset_index,
+                torch.full_like(target, self.ignore_index), target)
         probs = logits.softmax(dim=1)
-        valid = target != self.ignore_index
-        safe_target = torch.where(valid, target, torch.zeros_like(target))
+        valid = ce_target != self.ignore_index
+        # cross_entropy is NaN when every pixel is ignored (a fully binary-mask
+        # image, all pixels superset); contribute 0 CE in that case.
+        if bool(valid.any()):
+            ce = functional.cross_entropy(logits, ce_target, ignore_index=self.ignore_index)
+        else:
+            ce = logits.new_zeros(())
+        safe_target = torch.where(valid, ce_target, torch.zeros_like(ce_target))
         one_hot = functional.one_hot(safe_target, num_classes=self.num_classes)
         one_hot = one_hot.permute(0, 3, 1, 2).to(probs.dtype)
         mask = valid.unsqueeze(1).to(probs.dtype)
-        probs = probs * mask
-        one_hot = one_hot * mask
-        dice = soft_dice_coefficient(probs, one_hot, dims=(0, 2, 3), smooth=self.smooth)
+        dice = soft_dice_coefficient(probs * mask, one_hot * mask,
+                                     dims=(0, 2, 3), smooth=self.smooth)
         dice_loss = 1.0 - dice.mean()
-        return self.ce_weight * ce + self.dice_weight * dice_loss
+        loss = self.ce_weight * ce + self.dice_weight * dice_loss
+        if self.superset_index is not None:
+            fg_pixels = target == self.superset_index
+            if bool(fg_pixels.any()):
+                p_fg = (1.0 - probs[:, self.background_index]).clamp_min(1e-6)
+                loss = loss + self.superset_weight * (-p_fg.log())[fg_pixels].mean()
+        return loss
 
 
 class BinaryFocalLoss(nn.Module):
