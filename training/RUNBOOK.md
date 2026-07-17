@@ -131,6 +131,74 @@ python training/data_prep.py \
 grouped cross-validation. The rest of this runbook uses the simple
 `--images`/`--masks` path from 3a.
 
+### 3c. Single-model tissue segmenter — all wound types, HD_T86 7-class
+
+This is the production path from [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md): **one**
+7-class tissue segmenter whose output drives the whole HD_T86 report. It trains
+on the combined corpus with partial labels — tissue-mask sets supervise the six
+tissue classes; the large binary wound sets supervise localization.
+
+```bash
+source /data/briefer/sorbed-venv/bin/activate
+cd /data/briefer/sorbed
+export PYTHONUNBUFFERED=1
+
+# (1) fetch the open sources
+python training/fetch_corpus.py --data-root /data/briefer/corpus
+
+# (2) re-label each TISSUE set to the unified 7-class order, then VERIFY the
+#     emitted mapping_report.json before trusting the mapping (see DATA_README).
+for s in dfutissue woundtissue wounds_307 complexwounddb; do
+  python training/arrange_tissue.py \
+      --images /data/briefer/corpus/$s/images \
+      --masks  /data/briefer/corpus/$s/masks \
+      --mapping training/configs/tissue_maps/$s.yaml \
+      --out /data/briefer/corpus/arranged/$s
+done
+# then point each tissue source's root: in a data-prep config at
+# /data/briefer/corpus/arranged/<name> and keep mask_kind: tissue.
+
+# (3) build leakage-free patient-level manifests
+python training/data_prep.py \
+    --config training/configs/datasets.yaml \
+    --out-dir /data/briefer/manifests/combined \
+    --paths-relative-to /data/briefer/corpus
+
+# (4) drop cross-source duplicate photos BEFORE training
+python training/dedup.py \
+    --manifest /data/briefer/manifests/combined/train.jsonl \
+    --out /data/briefer/manifests/combined/train.dedup.jsonl \
+    --hamming 6 --source-priority dfutissue woundtissue wounds_307 azh_fuseg
+
+# (5) train the 7-class segmenter (launch under tmux — see step 4)
+python -m training.train_seg \
+    --config training/configs/seg_tissue_segformer.yaml \
+    --manifest /data/briefer/manifests/combined/train.dedup.csv \
+    --out-dir artifacts/seg_tissue
+```
+
+The trainer prints `partial-label superset supervision on` and the
+tissue/binary row counts when the mixed manifest is detected. It exports
+`artifacts/seg_tissue/model.onnx` (`logits[1,7,512,512]`) with a sha256.
+
+### 3d. Clean previous runs of THIS project only
+
+Scope every delete to Sorbed's own directories — never touch other projects on
+the shared box. Safe to run between attempts:
+
+```bash
+# artifacts, manifests, and logs from earlier Sorbed runs only
+rm -rf /data/briefer/sorbed/artifacts/*
+rm -rf /data/briefer/manifests/*
+rm -rf /data/briefer/corpus/arranged/*
+rm -f  /data/briefer/sorbed/training/*.log
+# kill only a prior Sorbed tmux training session (by our known name)
+tmux has-session -t sorbed-train 2>/dev/null && tmux kill-session -t sorbed-train
+```
+
+Do **not** delete `/data/briefer/corpus/<source>` raw downloads unless you intend
+to re-fetch them, and do not touch anything outside `/data/briefer`.
+
 ---
 
 ## 4. Find the MIG UUID and launch training (on the server)
