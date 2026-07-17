@@ -260,3 +260,41 @@ URLs are not confirmed. As stated above, there is no open dataset that is
 simultaneously pressure-injury, NPIAP-staged, segmented, and longitudinal; the
 combined corpus approximates it by fusing separate open axes, and true
 staged/longitudinal pressure-injury data requires a clinical partnership.
+
+### Tissue-mask arrange step (for the single 7-class segmenter)
+
+The single-model tissue segmenter (`configs/seg_tissue_segformer.yaml`) needs
+masks in ONE unified order — `0 background, 1 epithelial, 2 granulation,
+3 slough, 4 eschar, 5 adipose, 6 deep_structure`. No public tissue set ships
+this schema, so each tissue source is re-labelled once with
+`training/arrange_tissue.py` and an operator-confirmed mapping file
+(`configs/tissue_maps/*.yaml`):
+
+```bash
+python training/arrange_tissue.py \
+    --images /data/sorbed/corpus/dfutissue/DFUTissue/images \
+    --masks  /data/sorbed/corpus/dfutissue/DFUTissue/labels \
+    --mapping training/configs/tissue_maps/dfutissue.yaml \
+    --out /data/sorbed/corpus/arranged/dfutissue
+```
+
+It writes `images/` + `masks/` in the unified order plus a `mapping_report.json`
+listing every native mask value and its pixel count — **read it and confirm the
+mapping before training**; an unmapped value is an error by default so an unknown
+tissue can never be silently folded into background. Point the tissue sources'
+`root:` in a data-prep config at these arranged directories and keep their
+`mask_kind: tissue`; leave the binary wound sets as `mask_kind: binary` (they
+supervise localization via the loss's partial-label superset term).
+
+De-duplicate before splitting so a shared photo cannot land in two splits and
+inflate the score:
+
+```bash
+python training/dedup.py \
+    --manifest /data/sorbed/manifests/combined/train.jsonl \
+    --out /data/sorbed/manifests/combined/train.dedup.jsonl \
+    --hamming 6 --source-priority dfutissue woundtissue wounds_307 azh_fuseg
+```
+
+`--source-priority` keeps the representative from the higher-priority (better-
+masked) source; the emitted `*.dedup_report.json` records every dropped pair.
