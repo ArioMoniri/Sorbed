@@ -47,7 +47,9 @@ _ROLE_WEIGHTS: dict[str, float] = {
 _RULE_WEIGHT = 1.0
 _OVERRIDE_BOOST = 1.3
 
-_MANIFEST_COLUMNS = ["image", "mask", "stage", "patient_id", "sample_weight", "source"]
+_MANIFEST_COLUMNS = [
+    "image", "mask", "stage", "patient_id", "sample_weight", "source", "grader_sha"
+]
 
 
 @feedback_app.command()
@@ -168,15 +170,25 @@ def _manifest_rows(store: FeedbackStore) -> list[dict[str, object]]:
         source = "rule"
         weight = _RULE_WEIGHT
         if fb is not None:
+            has_correction = bool(fb.corrected_stage or fb.corrected_mask_path)
             if fb.corrected_stage:
                 label = fb.corrected_stage
             if fb.corrected_mask_path:
                 mask = fb.corrected_mask_path
-            source = "human"
-            weight = _ROLE_WEIGHTS.get(fb.reviewer_role, _RULE_WEIGHT)
-            # A human override of the model is the informative gradient.
-            if fb.corrected_stage and fb.corrected_stage != inf.predicted_stage:
-                weight *= _OVERRIDE_BOOST
+            if has_correction:
+                # An independent human correction is the informative gradient —
+                # it enters at the reviewer's role weight.
+                source = "human_corrected"
+                weight = _ROLE_WEIGHTS.get(fb.reviewer_role, _RULE_WEIGHT)
+                if fb.corrected_stage and fb.corrected_stage != inf.predicted_stage:
+                    weight *= _OVERRIDE_BOOST
+            else:
+                # A bare "agree" is a VOTE on the model's own output, not an
+                # independent label. It must never enter at human role weight (that
+                # laundered model predictions into human-weighted ground truth and
+                # closed a feedback echo chamber) and is capped at the rule tier.
+                source = "human_confirmed"
+                weight = min(_ROLE_WEIGHTS.get(fb.reviewer_role, _RULE_WEIGHT), _RULE_WEIGHT)
         if not label:
             # Model abstained and no human correction — nothing to learn from.
             continue
@@ -185,9 +197,14 @@ def _manifest_rows(store: FeedbackStore) -> list[dict[str, object]]:
                 "image": inf.image_ref,
                 "mask": mask,
                 "stage": label,
-                "patient_id": inf.patient_ref or "",
+                # An empty patient key makes the downstream leakage check trivially
+                # true; give unkeyed rows a unique per-record group instead.
+                "patient_id": inf.patient_ref or f"__record__:{inf.record_id}",
                 "sample_weight": round(weight, 4),
                 "source": source,
+                # Provenance: which grader produced the predicted label this row is
+                # built on — lets the continual trainer bound self-generated labels.
+                "grader_sha": inf.model_versions.grader,
             }
         )
     return rows

@@ -87,7 +87,8 @@ def test_store_append_and_join(tmp_path) -> None:
     assert pairs["recB"] is None
 
 
-def test_store_join_takes_newest_feedback(tmp_path) -> None:
+def test_store_join_resolves_by_role_then_recency(tmp_path) -> None:
+    # A senior HQ correction supersedes an earlier front-line nurse review.
     store = FeedbackStore(tmp_path)
     store.append_inference(_inference("recA"))
     store.append_feedback(_feedback("recA", created_at="2026-07-11T01:00:00+00:00",
@@ -154,8 +155,43 @@ def test_export_human_label_overrides_model(tmp_path) -> None:
     with open(out, encoding="utf-8") as handle:
         rows = {r["image"]: r for r in csv.DictReader(handle)}
 
-    human = next(r for r in rows.values() if r["source"] == "human")
+    human = next(r for r in rows.values() if r["source"] == "human_corrected")
     rule = next(r for r in rows.values() if r["source"] == "rule")
     assert human["stage"] == "stage_4"  # human label overrode the model's stage_3
     assert float(human["sample_weight"]) > float(rule["sample_weight"])
     assert rule["stage"] == "stage_2"
+    # Provenance of the model that produced each predicted label is carried through.
+    assert human["grader_sha"] == "rule"
+    assert rule["grader_sha"] == "rule"
+
+
+def test_role_precedence_beats_recency(tmp_path) -> None:
+    # A physician correction must not be overwritten by a LATER nurse review.
+    store = FeedbackStore(tmp_path)
+    store.append_inference(_inference("recA", stage="stage_3"))
+    store.append_feedback(_feedback("recA", created_at="2026-07-11T01:00:00+00:00",
+                                    reviewer_role="physician", corrected_stage="stage_4"))
+    store.append_feedback(_feedback("recA", created_at="2026-07-11T09:00:00+00:00",
+                                    reviewer_role="nurse", corrected_stage="stage_2"))
+    (_, fb), = list(store.join_pairs())
+    assert fb is not None
+    assert fb.reviewer_role == "physician"      # senior tier wins despite being older
+    assert fb.corrected_stage == "stage_4"
+
+
+def test_agree_is_confirmed_not_human_weighted(tmp_path) -> None:
+    # A bare agree (no correction) must be 'human_confirmed' at <= rule weight,
+    # never laundered in at the reviewer's role weight.
+    store_root = tmp_path / "store"
+    store = FeedbackStore(store_root)
+    store.append_inference(_inference("recA", stage="stage_2"))
+    store.append_feedback(_feedback("recA", reviewer_role="physician",
+                                    agree=True, corrected_stage=None))
+    out = tmp_path / "m.csv"
+    result = runner.invoke(feedback_app, ["export", "--root", str(store_root), "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    with open(out, encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["source"] == "human_confirmed"
+    assert row["stage"] == "stage_2"            # still the model's own label
+    assert float(row["sample_weight"]) <= 1.0   # capped at the rule tier

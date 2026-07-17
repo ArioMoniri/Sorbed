@@ -34,6 +34,18 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
 _ENV_ROOT = "SORBED_FEEDBACK_DIR"
 _DEFAULT_ROOT = "feedback"
 
+# Reviewer seniority for conflict resolution. Physician and HQ are the senior
+# tier (a wound-care lead / headquarters adjudicator); nurse is the front-line
+# tier. A higher rank is a hard floor — a later review from a lower tier cannot
+# overwrite it. Unknown roles rank below all named tiers.
+_ROLE_RANK: dict[str, int] = {"physician": 3, "hq": 3, "nurse": 1}
+
+
+def _feedback_precedence(fb: FeedbackRecord) -> tuple[int, str]:
+    """Sort key for conflict resolution: (role rank, then recency within a tier)."""
+    rank = _ROLE_RANK.get(fb.reviewer_role.strip().lower(), 0)
+    return (rank, fb.created_at)
+
 
 class FeedbackStore:
     """Filesystem-backed feedback store rooted at a single directory."""
@@ -124,11 +136,18 @@ class FeedbackStore:
         yield from _iter_records(self.feedback_path, FeedbackRecord)
 
     def latest_feedback_by_record(self) -> dict[str, FeedbackRecord]:
-        """Map ``record_id`` to its newest feedback row (by ``created_at``)."""
+        """Map ``record_id`` to its authoritative feedback row by ROLE precedence.
+
+        A senior reviewer's label is a hard floor: a physician/HQ correction is
+        never overwritten by a later nurse review (recency only breaks ties within
+        the same role tier). This matches the contract in ``records.py`` — resolve
+        conflicts by role precedence — and prevents a late low-tier review from
+        silently corrupting an adjudicated label.
+        """
         latest: dict[str, FeedbackRecord] = {}
         for fb in self.iter_feedback():
             current = latest.get(fb.record_id)
-            if current is None or fb.created_at >= current.created_at:
+            if current is None or _feedback_precedence(fb) >= _feedback_precedence(current):
                 latest[fb.record_id] = fb
         return latest
 

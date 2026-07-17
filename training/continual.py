@@ -64,10 +64,21 @@ GRADE_CLASSES: tuple[str, ...] = (
 )
 _STAGE_TO_INDEX: dict[str, int] = {name: i for i, name in enumerate(GRADE_CLASSES)}
 _N_STAGES = len(GRADE_CLASSES)
-_MANIFEST_COLUMNS = ("image", "mask", "stage", "patient_id", "sample_weight", "source")
+# Columns written to a manifest / replay buffer. ``grader_sha`` carries the
+# provenance of the predicted label a row is built on (feedback export sets it),
+# so the trainer can bound self-generated labels.
+_MANIFEST_COLUMNS = (
+    "image", "mask", "stage", "patient_id", "sample_weight", "source", "grader_sha"
+)
+# Only the original six are REQUIRED to read a manifest; grader_sha is optional so
+# manifests produced before provenance plumbing still load (with an empty sha).
+_REQUIRED_COLUMNS = ("image", "mask", "stage", "patient_id", "sample_weight", "source")
 
-# Sources that count as human confirmation (eligible for the replay buffer).
-_HUMAN_SOURCES = frozenset({"human", "hq", "nurse", "physician", "correction"})
+# Sources eligible for the replay buffer: only INDEPENDENT human corrections. A
+# bare "agree" (``human_confirmed``) is a vote on the model's own output, not an
+# independent label, so it is deliberately excluded — admitting it would let the
+# model's predictions re-enter its own training set and compound in replay.
+_HUMAN_SOURCES = frozenset({"human_corrected", "correction"})
 
 
 @dataclass(frozen=True)
@@ -80,10 +91,15 @@ class ContinualRow:
     patient_id: str
     sample_weight: float
     source: str
+    grader_sha: str = ""
 
     @property
     def is_human(self) -> bool:
-        """Whether this row came from a human correction/confirmation."""
+        """Whether this row is an independent human correction (replay-eligible).
+
+        A bare confirmation (``human_confirmed``) is intentionally NOT human here:
+        it votes on the model's own output and must not seed the replay buffer.
+        """
         return self.source.strip().lower() in _HUMAN_SOURCES
 
 
@@ -118,9 +134,9 @@ def read_continual_manifest(manifest: str | Path) -> list[ContinualRow]:
     rows: list[ContinualRow] = []
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
-        if reader.fieldnames is None or not set(_MANIFEST_COLUMNS).issubset(reader.fieldnames):
+        if reader.fieldnames is None or not set(_REQUIRED_COLUMNS).issubset(reader.fieldnames):
             raise SystemExit(
-                f"manifest {path} must have columns {list(_MANIFEST_COLUMNS)}; "
+                f"manifest {path} must have columns {list(_REQUIRED_COLUMNS)}; "
                 f"got {reader.fieldnames}"
             )
         for line_no, row in enumerate(reader, start=2):
@@ -141,6 +157,7 @@ def read_continual_manifest(manifest: str | Path) -> list[ContinualRow]:
                     patient_id=row["patient_id"].strip(),
                     sample_weight=_parse_float(row.get("sample_weight"), default=1.0),
                     source=(row.get("source") or "rule").strip() or "rule",
+                    grader_sha=(row.get("grader_sha") or "").strip(),
                 )
             )
     if not rows:
@@ -170,6 +187,7 @@ def append_replay_rows(replay_manifest: str | Path, rows: list[ContinualRow]) ->
                     row.patient_id,
                     f"{row.sample_weight:.6g}",
                     row.source,
+                    row.grader_sha,
                 ]
             )
     return len(rows)

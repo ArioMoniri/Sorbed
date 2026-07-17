@@ -192,6 +192,17 @@ def fedavg_aggregate(
     if not shared:
         raise ValueError("clients share no common parameter keys")
 
+    # LoRA factors must NOT be factor-averaged: mean(A)·mean(B) != mean(A·B), so the
+    # aggregate corresponds to no client's actual update. Reconstruct dW = B·A per
+    # client and average that instead (via aggregate_client_updates), or aggregate
+    # full deltas. Refuse the unsound path loudly rather than silently corrupt.
+    lora_keys = sorted(k for k in shared if ".lora_" in k)
+    if lora_keys:
+        raise ValueError(
+            "refusing to average LoRA factors directly (mean(A)·mean(B) != "
+            f"mean(A·B)); reconstruct B·A per client first. Offending keys: {lora_keys[:3]}"
+        )
+
     aggregated: dict[str, Any] = {}
     for key in shared:
         acc = torch.zeros_like(deltas[0][key])
@@ -199,6 +210,70 @@ def fedavg_aggregate(
             acc = acc + (float(w) / total) * d[key]
         aggregated[key] = acc
     return aggregated
+
+
+def delta_l2_norm(delta: dict[str, Any]) -> float:
+    """Global L2 norm of a delta across all its tensors."""
+    import torch
+
+    if not delta:
+        return 0.0
+    sq = torch.zeros(())
+    for tensor in delta.values():
+        sq = sq + (tensor.detach().float() ** 2).sum()
+    return float(sq.sqrt())
+
+
+def clip_delta_norm(delta: dict[str, Any], max_norm: float) -> dict[str, Any]:
+    """Scale a delta down so its global L2 norm is at most ``max_norm``.
+
+    A single outlier client (mis-scaled LR, corrupt local data, or a crude update-
+    poisoning attempt) can dominate a small-cohort FedAvg. Clipping the per-client
+    delta norm before aggregation bounds any one client's influence. This is a
+    correctness/robustness guard, not a security control — it cannot see a client
+    that stays just under the threshold, and it is degenerate as a Byzantine
+    defense at two or three sites.
+    """
+    if max_norm <= 0:
+        raise ValueError("max_norm must be positive")
+    norm = delta_l2_norm(delta)
+    if norm <= max_norm or norm == 0.0:
+        return {k: v.clone() for k, v in delta.items()}
+    scale = max_norm / norm
+    return {k: (v * scale) for k, v in delta.items()}
+
+
+def aggregate_client_updates(
+    updates: list[ClientUpdate],
+    *,
+    max_delta_norm: float | None = None,
+) -> dict[str, Any]:
+    """FedAvg over :class:`ClientUpdate`s with base/round consistency + norm-clip.
+
+    Asserts every update shares one ``base_sha`` and ``round_id`` before averaging
+    — mixing deltas taken against different base checkpoints silently corrupts the
+    global model, and ``fedavg_aggregate`` alone never checks this. Weights are the
+    clients' ``num_samples`` (canonical FedAvg). When ``max_delta_norm`` is set,
+    each client's delta is norm-clipped first (see :func:`clip_delta_norm`).
+    """
+    if not updates:
+        raise ValueError("no client updates to aggregate")
+    base_shas = {u.base_sha for u in updates}
+    if len(base_shas) != 1:
+        raise ValueError(
+            f"client updates disagree on base_sha ({sorted(base_shas)}); "
+            "they were computed against different base checkpoints and cannot be averaged"
+        )
+    round_ids = {u.round_id for u in updates}
+    if len(round_ids) != 1:
+        raise ValueError(f"client updates disagree on round_id ({sorted(round_ids)})")
+    deltas = [u.tensors for u in updates]
+    if max_delta_norm is not None:
+        deltas = [clip_delta_norm(d, max_delta_norm) for d in deltas]
+    weights = [float(u.num_samples) for u in updates]
+    if sum(weights) <= 0:
+        weights = None  # fall back to uniform if no sample counts
+    return fedavg_aggregate(deltas, weights)
 
 
 def package_client_update(
