@@ -38,6 +38,14 @@ IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"})
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
+# Sentinel class index written for the foreground of a *binary* (wound-vs-
+# background) mask in a multiclass tissue run: the pixel is known to be wound
+# but of unknown tissue class. ``MulticlassDiceCELoss(superset_index=...)``
+# excludes these pixels from cross-entropy/Dice and instead pushes their
+# foreground probability up. It is negative so it can never collide with a real
+# tissue-class index read from a mask (those are >= 0).
+SUPERSET_SENTINEL: int = -2
+
 # The photo-stageable NPIAP classes, in ordinal-then-side order. Stages 1–4 form
 # the ordered axis; Unstageable and Deep-Tissue-Injury are non-ordinal sides.
 GRADE_CLASSES: tuple[str, ...] = (
@@ -183,6 +191,13 @@ class SegmentationDataset(Dataset):
     For ``num_classes == 1`` masks are binarized (wound = nonzero) and returned as
     float ``(1, H, W)``. For ``num_classes > 1`` mask pixel values are taken as
     class indices and returned as long ``(H, W)`` for cross-entropy.
+
+    **Partial labels.** In a multiclass run, sources whose masks are only
+    wound-vs-background (``binary_flags[i]`` true) cannot supply a tissue class.
+    When ``superset_index`` is set, such a mask's foreground is written as that
+    sentinel (see :data:`SUPERSET_SENTINEL`) so the loss supervises localization
+    without fabricating a tissue label; its background stays class 0. Sources with
+    real tissue-class masks (flag false) pass their pixel values through unchanged.
     """
 
     def __init__(
@@ -192,11 +207,23 @@ class SegmentationDataset(Dataset):
         input_size: int,
         num_classes: int = 1,
         augment: bool = False,
+        superset_index: int | None = None,
+        binary_flags: Sequence[bool] | None = None,
     ) -> None:
         self._pairs = list(pairs)
         self._size = int(input_size)
         self._num_classes = int(num_classes)
         self._augment = augment
+        self._superset_index = superset_index
+        if binary_flags is None:
+            self._binary = [False] * len(self._pairs)
+        else:
+            self._binary = [bool(flag) for flag in binary_flags]
+            if len(self._binary) != len(self._pairs):
+                raise ValueError(
+                    f"binary_flags length {len(self._binary)} != "
+                    f"pairs length {len(self._pairs)}"
+                )
 
     def __len__(self) -> int:
         return len(self._pairs)
@@ -212,7 +239,11 @@ class SegmentationDataset(Dataset):
         if self._num_classes == 1:
             binary = (mask > 0).astype(np.float32)[np.newaxis, ...]
             return image_tensor, torch.from_numpy(np.ascontiguousarray(binary))
-        target = mask.astype(np.int64)
+        if self._superset_index is not None and self._binary[index]:
+            # Wound-vs-background mask: foreground -> superset sentinel, bg -> 0.
+            target = np.where(mask > 0, self._superset_index, 0).astype(np.int64)
+        else:
+            target = mask.astype(np.int64)
         return image_tensor, torch.from_numpy(np.ascontiguousarray(target))
 
 

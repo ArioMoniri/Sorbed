@@ -38,6 +38,7 @@ from torch.utils.data import DataLoader
 
 from training import data as data_mod
 from training import memory, utils
+from training.data import SUPERSET_SENTINEL
 from training.losses import DiceBCELoss, MulticlassDiceCELoss
 from training.models import build_segmenter, export_onnx
 
@@ -143,11 +144,17 @@ def _load_patient_groups(manifest: Path, stems: list[str]) -> list[str]:
 
 def splits_from_manifest(
     cfg: dict[str, Any],
-) -> tuple[list[tuple[Path, Path]], list[tuple[Path, Path]]]:
-    """Build ``(train_pairs, val_pairs)`` from a combined multi-source manifest.
+) -> tuple[
+    list[tuple[Path, Path]], list[tuple[Path, Path]], list[bool], list[bool]
+]:
+    """Build train/val pairs and per-pair binary-mask flags from a manifest.
 
     Only rows with a ``mask_path`` are used (segmentation needs masks); the split
-    is grouped by the manifest's ``patient_id`` so no source's patient leaks.
+    is grouped by the manifest's ``patient_id`` so no source's patient leaks. Each
+    record's ``mask_kind`` decides its flag: ``"tissue"`` masks carry real class
+    indices (flag ``False``), everything else is treated as a wound-vs-background
+    mask (flag ``True``) that supplies partial-label supervision via the loss's
+    superset term. Returns ``(train_pairs, val_pairs, train_binary, val_binary)``.
     """
     from training.datasets import read_manifest
 
@@ -155,11 +162,17 @@ def splits_from_manifest(
     if not records:
         raise SystemExit(f"no masked rows in manifest {cfg['manifest']}")
     pairs = [(Path(r.image_path), Path(r.mask_path)) for r in records]
+    binary = [(r.mask_kind or "binary").lower() != "tissue" for r in records]
     groups = [r.patient_id for r in records]
     folds = data_mod.group_kfold_indices(groups, n_splits=int(cfg["folds"]), seed=int(cfg["seed"]))
     train_idx, val_idx = folds[int(cfg["fold"]) % len(folds)]
-    print(f"manifest: {len(records)} masked rows from {len({r.source for r in records})} source(s)")
-    return [pairs[i] for i in train_idx], [pairs[i] for i in val_idx]
+    n_tissue = sum(1 for b in binary if not b)
+    print(f"manifest: {len(records)} masked rows from {len({r.source for r in records})} "
+          f"source(s); {n_tissue} tissue-labeled, {len(records) - n_tissue} binary")
+    return (
+        [pairs[i] for i in train_idx], [pairs[i] for i in val_idx],
+        [binary[i] for i in train_idx], [binary[i] for i in val_idx],
+    )
 
 
 def build_splits(
@@ -199,10 +212,13 @@ def evaluate(model: torch.nn.Module, loader: DataLoader, device: torch.device,
             meter.update(float(dice.mean().item()), images.size(0))
         else:
             preds = logits.argmax(dim=1)
+            # Exclude superset (unknown-class) pixels from partial-label masks:
+            # they carry no tissue label, so they score neither class.
+            valid = (targets != SUPERSET_SENTINEL).float()
             per_class = []
             for cls in range(1, num_classes):
-                p = (preds == cls).float()
-                t = (targets == cls).float()
+                p = (preds == cls).float() * valid
+                t = (targets == cls).float() * valid
                 inter = (p * t).sum(dim=(1, 2))
                 union = p.sum(dim=(1, 2)) + t.sum(dim=(1, 2))
                 per_class.append(((2.0 * inter + 1.0) / (union + 1.0)).mean())
@@ -220,23 +236,39 @@ def main(argv: list[str] | None = None) -> int:
     num_classes = int(cfg["num_classes"])
     size = int(cfg["input_size"])
 
+    train_binary: list[bool] | None = None
+    val_binary: list[bool] | None = None
     if cfg.get("manifest"):
-        train_pairs, val_pairs = splits_from_manifest(cfg)
+        train_pairs, val_pairs, train_binary, val_binary = splits_from_manifest(cfg)
     else:
         pairs = data_mod.pair_by_stem(cfg["images"], cfg["masks"])
         train_pairs, val_pairs = build_splits(pairs, cfg)
     if not train_pairs or not val_pairs:
         raise SystemExit("empty train or val split; add more data or adjust the split")
 
+    # Partial-label superset supervision only applies to a multiclass run that
+    # actually mixes in binary (wound-vs-background) sources.
+    superset_index = (
+        SUPERSET_SENTINEL
+        if num_classes > 1 and train_binary is not None and any(train_binary)
+        else None
+    )
+    if superset_index is not None:
+        print(f"partial-label superset supervision on (sentinel={superset_index})")
+
     train_loader = DataLoader(
         data_mod.SegmentationDataset(train_pairs, input_size=size,
-                                     num_classes=num_classes, augment=True),
+                                     num_classes=num_classes, augment=True,
+                                     superset_index=superset_index,
+                                     binary_flags=train_binary),
         batch_size=int(cfg["batch_size"]), shuffle=True,
         num_workers=num_workers, drop_last=True, pin_memory=device.type == "cuda",
     )
     val_loader = DataLoader(
         data_mod.SegmentationDataset(val_pairs, input_size=size,
-                                     num_classes=num_classes, augment=False),
+                                     num_classes=num_classes, augment=False,
+                                     superset_index=superset_index,
+                                     binary_flags=val_binary),
         batch_size=int(cfg["batch_size"]), shuffle=False,
         num_workers=num_workers, pin_memory=device.type == "cuda",
     )
@@ -255,7 +287,8 @@ def main(argv: list[str] | None = None) -> int:
           f"| device={device} | classes={num_classes}")
 
     criterion: torch.nn.Module = DiceBCELoss() if num_classes == 1 \
-        else MulticlassDiceCELoss(num_classes=num_classes)
+        else MulticlassDiceCELoss(num_classes=num_classes,
+                                  superset_index=superset_index, background_index=0)
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(cfg["lr"]),
                                   weight_decay=float(cfg["weight_decay"]))
     steps_per_epoch = max(1, len(train_loader))

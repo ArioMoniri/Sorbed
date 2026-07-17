@@ -93,6 +93,14 @@ class ManifestRecord:
     license:
         Short license/usage tag copied from the source (e.g. ``"research-only"``).
         This is metadata for hygiene tracking, not legal advice.
+    mask_kind:
+        How ``mask_path`` should be interpreted in a multiclass tissue run:
+        ``"tissue"`` when pixel values are unified tissue-class indices, or
+        ``"binary"`` when the mask is only wound-vs-background (foreground pixels
+        of unknown tissue class). Binary masks supply *partial-label* supervision:
+        their foreground drives localization via the segmentation loss's superset
+        term without inventing a tissue class. Defaults to ``"binary"`` — the
+        clinically safe assumption, since a wound mask never implies a class.
     """
 
     image_path: str
@@ -103,6 +111,7 @@ class ManifestRecord:
     visit_index: int
     source: str
     license: str
+    mask_kind: str = "binary"
 
     @classmethod
     def column_names(cls) -> list[str]:
@@ -127,6 +136,7 @@ class ManifestRecord:
             visit_index=int(row.get("visit_index", 0) or 0),
             source=str(row.get("source", "") or "unknown"),
             license=str(row.get("license", "") or "unknown"),
+            mask_kind=str(row.get("mask_kind", "") or "binary"),
         )
 
 
@@ -235,6 +245,7 @@ def scan_generic(
     body_part: str = "unknown",
     root_for_paths: Path | None = None,
     require_masks: bool = True,
+    mask_kind: str = "binary",
 ) -> list[ManifestRecord]:
     """Adapter for a flat ``root/images`` + ``root/masks`` layout.
 
@@ -268,6 +279,7 @@ def scan_generic(
                 visit_index=0,
                 source=source,
                 license=license,
+                mask_kind=mask_kind,
             )
         )
     return records
@@ -643,6 +655,7 @@ class SourceSpec:
     body_part: str = "unknown"
     license: str = "unknown"
     require_masks: bool = True
+    mask_kind: str = "binary"
 
     @classmethod
     def from_mapping(cls, mapping: dict[str, Any]) -> SourceSpec:
@@ -654,6 +667,12 @@ class SourceSpec:
                 f"unknown adapter {adapter!r} for source {mapping['name']!r}; "
                 f"choose one of {sorted(ADAPTERS)}"
             )
+        mask_kind = str(mapping.get("mask_kind", "binary")).lower()
+        if mask_kind not in ("binary", "tissue"):
+            raise ValueError(
+                f"source {mapping['name']!r}: mask_kind must be 'binary' or "
+                f"'tissue', got {mask_kind!r}"
+            )
         return cls(
             name=str(mapping["name"]),
             root=Path(str(mapping["root"])).expanduser(),
@@ -661,11 +680,13 @@ class SourceSpec:
             body_part=str(mapping.get("body_part", "unknown")),
             license=str(mapping.get("license", "unknown")),
             require_masks=bool(mapping.get("require_masks", True)),
+            mask_kind=mask_kind,
         )
 
     def scan(self, root_for_paths: Path | None) -> list[ManifestRecord]:
         """Run the adapter for this source."""
         if self.adapter == "azh_fuseg":
+            # AZH/FUSeg is foot-ulcer wound-vs-background only (always binary).
             return scan_azh_fuseg(
                 self.root,
                 source=self.name,
@@ -679,6 +700,7 @@ class SourceSpec:
             body_part=self.body_part,
             root_for_paths=root_for_paths,
             require_masks=self.require_masks,
+            mask_kind=self.mask_kind,
         )
 
 

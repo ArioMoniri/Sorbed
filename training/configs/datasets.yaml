@@ -22,6 +22,15 @@
 # `require_masks: false` for classification/staging sources with no masks (they
 # still feed the grading head, and become MedSAM mask-factory inputs).
 #
+# `mask_kind` (default `binary`) tells the 7-class tissue segmenter how to read a
+# source's masks: `tissue` = pixel values are unified tissue-class indices
+# (0 background .. 6 deep_structure, the order in seg_tissue_segformer.yaml);
+# `binary` = wound-vs-background only, so the mask supplies partial-label
+# (localization) supervision via the loss's superset term and never invents a
+# class. IMPORTANT: a `tissue` source's native class ids must first be re-mapped
+# to the unified order by the manual arrange step (DATA_README.md) — no public
+# set ships that schema. Ignored by the binary segmenter (num_classes: 1).
+#
 # Every `license` tag is hygiene metadata, not legal advice: re-check each
 # source's terms before any non-research use. Flags from the dataset audit are
 # repeated inline so they travel with the config.
@@ -76,6 +85,7 @@ sources:
     body_part: foot
     license: unstated-research
     require_masks: true
+    mask_kind: tissue   # after arrange -> unified 7-class order
 
   # ComplexWoundDB (github.com/recogna-lab/datasets). 27 in-the-wild imgs, 5
   # tissue classes; license "free available" (unspecified) — pilot only. Data in
@@ -86,6 +96,7 @@ sources:
     body_part: mixed
     license: unspecified-free
     require_masks: true
+    mask_kind: tissue   # after arrange -> unified 7-class order
 
   # --- Grading teachers: stage labels (maskless -> also MedSAM inputs) -----
   # PIID (github.com/FU-MedicalAI/PIID). ~1,091 whole-image stage labels
@@ -156,6 +167,7 @@ sources:
   #   body_part: mixed
   #   license: unstated
   #   require_masks: true
+  #   mask_kind: tissue   # after arrange -> unified 7-class order
   #
   # WoundTissue-147 (arXiv:2502.10652 — host UNVERIFIED by the audit; request).
   # 6 tissue types incl. bone/tendon (depth).
@@ -165,6 +177,7 @@ sources:
   #   body_part: mixed
   #   license: unstated
   #   require_masks: true
+  #   mask_kind: tissue   # after arrange -> unified 7-class order
 
 # Patient-level split. Fractions must sum to 1.0. Most of these sources carry no
 # patient IDs (each image is its own singleton group), so the split is

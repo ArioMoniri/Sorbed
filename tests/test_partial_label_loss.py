@@ -51,3 +51,50 @@ def test_superset_pixels_excluded_from_class_ce() -> None:
     value.backward()
     assert torch.isfinite(value)
     assert logits.grad is not None
+
+
+def _write_pair(tmp_path, mask_values):
+    cv2 = pytest.importorskip("cv2")
+    import numpy as np
+
+    image = (np.arange(16 * 16 * 3, dtype=np.uint8) % 255).reshape(16, 16, 3)
+    mask = np.zeros((16, 16), dtype=np.uint8)
+    mask[4:8, 4:8] = int(mask_values)
+    image_path = tmp_path / "a.png"
+    mask_path = tmp_path / "a_mask.png"
+    cv2.imwrite(str(image_path), image)
+    cv2.imwrite(str(mask_path), mask)
+    return image_path, mask_path
+
+
+def test_binary_source_maps_foreground_to_sentinel(tmp_path) -> None:
+    from training.data import SUPERSET_SENTINEL, SegmentationDataset
+
+    image_path, mask_path = _write_pair(tmp_path, mask_values=255)
+    dataset = SegmentationDataset(
+        [(image_path, mask_path)], input_size=16, num_classes=7,
+        superset_index=SUPERSET_SENTINEL, binary_flags=[True])
+    _, target = dataset[0]
+    # A binary source: foreground becomes the sentinel, background stays class 0.
+    assert set(target.unique().tolist()) == {0, SUPERSET_SENTINEL}
+
+
+def test_tissue_source_passes_class_indices_through(tmp_path) -> None:
+    from training.data import SUPERSET_SENTINEL, SegmentationDataset
+
+    image_path, mask_path = _write_pair(tmp_path, mask_values=3)
+    dataset = SegmentationDataset(
+        [(image_path, mask_path)], input_size=16, num_classes=7,
+        superset_index=SUPERSET_SENTINEL, binary_flags=[False])
+    _, target = dataset[0]
+    # A tissue source keeps its real class indices; no sentinel is introduced.
+    assert set(target.unique().tolist()) == {0, 3}
+
+
+def test_binary_flags_length_mismatch_raises(tmp_path) -> None:
+    from training.data import SegmentationDataset
+
+    image_path, mask_path = _write_pair(tmp_path, mask_values=255)
+    with pytest.raises(ValueError, match="binary_flags"):
+        SegmentationDataset([(image_path, mask_path)], input_size=16,
+                            num_classes=7, binary_flags=[True, False])
